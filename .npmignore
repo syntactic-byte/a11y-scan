@@ -1,0 +1,26 @@
+# VCS / local metadata
+.git/
+.gitignore
+.npmignore
+.DS_Store
+Thumbs.db
+
+# Development-only folders
+dashboard/
+docs/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+
+# Generated outputs
+a11y-report/
+tmp-report/
+tmp-report-html/
+*.log
+*.tgz
+
+# Local config
+.env
+.env.*
+.npmrc

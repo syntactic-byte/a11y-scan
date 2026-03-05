@@ -1,0 +1,27 @@
+node_modules/
+dashboard/node_modules/
+dist/
+dashboard/dist/
+coverage/
+*.log
+*.tgz
+.npmrc
+
+# Local env
+.env
+.env.*
+
+# Generated accessibility reports
+a11y-report/
+tmp-report/
+tmp-report-html/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Runtime artifacts
+playwright-report/
+test-results/

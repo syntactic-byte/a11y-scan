@@ -1,0 +1,99 @@
+body {
+  margin: 0;
+  background: radial-gradient(circle at top left, #14532d 0%, #0f172a 45%);
+  color: #f8fafc;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.card label {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.card strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1.8rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 50px;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  align-items: center;
+}
+
+.bar {
+  background: #334155;
+  border-radius: 999px;
+  overflow: hidden;
+  height: 8px;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #14b8a6);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border-bottom: 1px solid #334155;
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.controls {
+  display: flex;
+  gap: 0.7rem;
+  margin-bottom: 0.8rem;
+}
+
+input,
+select {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #f8fafc;
+  border-radius: 8px;
+  padding: 0.45rem;
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}

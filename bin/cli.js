@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+
+import { Command } from "commander"
+import { runScan } from "../src/index.js"
+import { serveDashboard } from "../src/reporting/dashboard-server.js"
+
+function parseNumber(value, fallback) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? fallback : parsed
+}
+
+function normalizePatterns(values) {
+  if (!values || values.length === 0) return []
+  return values
+    .flatMap((entry) => entry.split(","))
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const program = new Command()
+
+program
+  .name("a11y-scan")
+  .description("Large-scale accessibility scanner powered by Playwright + axe-core")
+  .argument("[url]", "target URL")
+  .option("--max-pages <number>", "maximum pages to scan", (v) => parseNumber(v, 2000), 2000)
+  .option("--concurrency <number>", "parallel page scans", (v) => parseNumber(v, 10), 10)
+  .option("--exclude <patterns...>", "exclude URL patterns")
+  .option("--include <patterns...>", "include URL patterns")
+  .option("--locale <locale>", "axe locale", "en")
+  .option("--sitemap <url>", "explicit sitemap URL")
+  .option("--depth <number>", "crawl depth", (v) => parseNumber(v, 6), 6)
+  .option("--report-dir <dir>", "output directory", "./a11y-report")
+  .option("--format <formats>", "comma-separated: html,json,csv", "html,json,csv")
+  .option("--sample-products <number>", "Shopify product sample size", (v) => parseNumber(v, 0), 0)
+  .option("--timeout <ms>", "page timeout in milliseconds", (v) => parseNumber(v, 30000), 30000)
+  .option("--headless", "run browser in headless mode", true)
+  .option("--no-headless", "run browser with UI")
+  .option("--fail-on-critical", "exit non-zero when critical issues exist", false)
+  .option("--fail-on-serious", "exit non-zero when serious issues exist", false)
+  .option("--check-keyboard", "run keyboard traversal checks", false)
+  .option("--check-aria", "run ARIA attribute checks", false)
+  .option("--check-focus-order", "run focus order checks", false)
+  .option("--contrast-screenshots", "capture screenshots for color contrast issues", false)
+  .option("--dashboard", "serve the generated dashboard", false)
+  .option("--port <number>", "dashboard server port", (v) => parseNumber(v, 4173), 4173)
+  .action(async (url, options) => {
+    const normalizedOptions = {
+      ...options,
+      exclude: normalizePatterns(options.exclude),
+      include: normalizePatterns(options.include)
+    }
+
+    if (!url && !options.dashboard) {
+      throw new Error("Provide a URL to scan or use --dashboard to serve existing reports")
+    }
+
+    if (url) {
+      const result = await runScan(url, normalizedOptions)
+
+      if (result.exitCode > 0) {
+        process.exitCode = result.exitCode
+      }
+    }
+
+    if (options.dashboard) {
+      await serveDashboard({
+        reportDir: options.reportDir,
+        port: options.port
+      })
+    }
+  })
+
+program.parseAsync(process.argv)
