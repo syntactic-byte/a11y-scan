@@ -1,33 +1,48 @@
 #!/usr/bin/env node
 
+import { Command } from "commander"
+import chalk from "chalk"
+import { discoverUrls } from "../src/sitemap.js"
 import crawl from "../src/crawler.js"
 import scan from "../src/scanner.js"
-import { findSitemaps, parseSitemaps } from "../src/sitemap.js"
+import { generateReport } from "../src/report.js"
 
-const url = process.argv[2]
+const program = new Command()
 
-if (!url) {
-  console.log("Usage: a11y-scan <url>")
-  process.exit(1)
-}
+program
+  .argument("<url>")
+  .option("--max-pages <number>", "limit scanned pages", 200)
+  .option("--concurrency <number>", "parallel scans", 5)
+  .option("--exclude <paths...>", "exclude paths")
+  .parse()
+
+const options = program.opts()
+const url = program.args[0]
 
 async function run() {
 
-  console.log("🔎 Discovering URLs...")
+  console.log(chalk.cyan("\n🔎 Discovering URLs\n"))
 
   let urls = []
 
   try {
-    const sitemaps = await findSitemaps(url)
-    urls = await parseSitemaps(sitemaps)
+    urls = await discoverUrls(url)
   } catch {
-    console.log("No sitemap found, crawling instead")
+    console.log("No sitemap detected — crawling site")
     urls = await crawl(url)
   }
 
-  console.log(`Found ${urls.length} pages`)
+  if (options.exclude) {
+    urls = urls.filter(u => !options.exclude.some(e => u.includes(e)))
+  }
 
-  await scan(urls)
+  urls = urls.slice(0, options.maxPages)
+
+  console.log(`Found ${urls.length} pages\n`)
+
+  const results = await scan(urls, options.concurrency)
+
+  generateReport(results)
 
 }
 

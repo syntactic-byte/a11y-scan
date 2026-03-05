@@ -1,42 +1,50 @@
 import { chromium } from "playwright"
 import AxeBuilder from "@axe-core/playwright"
-import fs from "fs"
+import pLimit from "p-limit"
 
-export default async function scan(urls) {
+export default async function scan(urls, concurrency = 5) {
 
   const browser = await chromium.launch()
-  const page = await browser.newPage()
 
-  const report = []
+  const limit = pLimit(concurrency)
 
-  for (const url of urls) {
+  const tasks = urls.map(url =>
+    limit(async () => {
 
-    console.log("Scanning", url)
+      const page = await browser.newPage()
 
-    try {
+      console.log("Scanning", url)
 
-      await page.goto(url, { waitUntil: "networkidle" })
+      try {
 
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa"])
-        .analyze()
+        await page.goto(url, { waitUntil: "networkidle" })
 
-      report.push({
-        url,
-        violations: results.violations
-      })
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa"])
+          .analyze()
 
-    } catch {}
+        await page.close()
 
-  }
+        return {
+          url,
+          violations: results.violations
+        }
+
+      } catch {
+
+        return {
+          url,
+          violations: []
+        }
+
+      }
+
+    })
+  )
+
+  const results = await Promise.all(tasks)
 
   await browser.close()
 
-  fs.writeFileSync(
-    "a11y-report.json",
-    JSON.stringify(report, null, 2)
-  )
-
-  console.log("Report saved: a11y-report.json")
-
+  return results
 }

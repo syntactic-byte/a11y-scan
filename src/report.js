@@ -1,46 +1,70 @@
 import fs from "fs"
-import chalk from "chalk"
 
-export function generateReport(results, options = {}) {
+export function generateReport(results) {
 
-  const {
-    jsonPath = "a11y-report.json",
-    htmlPath = "a11y-report.html"
-  } = options
+  fs.writeFileSync(
+    "a11y-report.json",
+    JSON.stringify(results, null, 2)
+  )
 
-  // Save JSON report
-  fs.writeFileSync(jsonPath, JSON.stringify(results, null, 2))
-
-  console.log(chalk.green(`\n✔ JSON report written to ${jsonPath}`))
-
-  // Console summary
-  let totalViolations = 0
-
-  console.log("\nAccessibility Summary\n")
+  const grouped = {}
 
   for (const page of results) {
+    for (const v of page.violations) {
 
-    const count = page.violations.length
-    totalViolations += count
+      if (!grouped[v.id]) grouped[v.id] = []
 
-    if (count === 0) {
-      console.log(chalk.green(`✔ ${page.url}`))
-    } else {
-      console.log(chalk.red(`✖ ${page.url} (${count} issues)`))
+      grouped[v.id].push({
+        url: page.url,
+        impact: v.impact,
+        description: v.help
+      })
 
-      for (const v of page.violations) {
-        console.log(`   ${chalk.yellow(v.id)} — ${v.help}`)
-      }
     }
   }
 
-  console.log("\nTotal violations:", totalViolations)
+  const html = `
+<html>
+<head>
+<title>Accessibility Report</title>
+<style>
+body{font-family:sans-serif;padding:40px}
+.rule{margin-bottom:30px;border:1px solid #ddd;padding:15px}
+.impact{font-weight:bold}
+</style>
+</head>
 
-  // Generate HTML report
-  const html = generateHTML(results)
+<body>
 
-  fs.writeFileSync(htmlPath, html)
+<h1>Accessibility Report</h1>
 
-  console.log(chalk.green(`✔ HTML report written to ${htmlPath}\n`))
+<h2>Pages scanned: ${results.length}</h2>
 
+${Object.entries(grouped).map(([rule, items]) => `
+<div class="rule">
+
+<h3>${rule}</h3>
+
+${items.map(i => `
+<p>
+<span class="impact">${i.impact}</span>
+<br>
+${i.description}
+<br>
+${i.url}
+</p>
+`).join("")}
+
+</div>
+`).join("")}
+
+</body>
+</html>
+`
+
+  fs.writeFileSync("a11y-report.html", html)
+
+  console.log("\nReports generated:")
+  console.log("a11y-report.json")
+  console.log("a11y-report.html\n")
 }

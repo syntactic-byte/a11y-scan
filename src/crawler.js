@@ -13,16 +13,15 @@ export default async function crawl(startUrl) {
     const url = queue.shift()
 
     if (visited.has(url)) continue
-    visited.add(url)
 
-    console.log("Crawling", url)
+    visited.add(url)
 
     try {
 
       await page.goto(url, { waitUntil: "networkidle" })
 
-      const links = await page.$$eval("a[href]", links =>
-        links.map(a => a.href)
+      const links = await page.$$eval("a[href]", a =>
+        a.map(l => l.href)
       )
 
       for (const link of links) {
@@ -38,5 +37,4 @@ export default async function crawl(startUrl) {
   await browser.close()
 
   return [...visited]
-
 }
