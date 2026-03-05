@@ -1,11 +1,7 @@
+const KNOWN_IMPACTS = new Set(["critical", "serious", "moderate", "minor"])
+
 function newImpactCounter() {
-  return {
-    critical: 0,
-    serious: 0,
-    moderate: 0,
-    minor: 0,
-    unknown: 0
-  }
+  return { critical: 0, serious: 0, moderate: 0, minor: 0, unknown: 0 }
 }
 
 export function buildSeveritySummary(results) {
@@ -15,28 +11,26 @@ export function buildSeveritySummary(results) {
   for (const page of results) {
     for (const violation of page.violations) {
       const count = Math.max(1, violation.nodes.length)
-      impacts[violation.impact || "unknown"] += count
+      const key = KNOWN_IMPACTS.has(violation.impact) ? violation.impact : "unknown"
+      impacts[key] += count
       totalViolations += count
     }
   }
 
-  return {
-    totalViolations,
-    impacts
-  }
+  return { totalViolations, impacts }
 }
 
 export function buildWcagSummary(results) {
   const levels = {
-    "wcag2a": 0,
-    "wcag2aa": 0,
-    "wcag2aaa": 0,
-    "wcag21a": 0,
-    "wcag21aa": 0,
-    "wcag21aaa": 0,
-    "wcag22a": 0,
-    "wcag22aa": 0,
-    "wcag22aaa": 0
+    wcag2a: 0,
+    wcag2aa: 0,
+    wcag2aaa: 0,
+    wcag21a: 0,
+    wcag21aa: 0,
+    wcag21aaa: 0,
+    wcag22a: 0,
+    wcag22aa: 0,
+    wcag22aaa: 0
   }
 
   for (const page of results) {

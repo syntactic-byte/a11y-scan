@@ -11,8 +11,8 @@ import {
 
 function isLikelyShopify(urls) {
   return urls.some((url) => {
-    const path = new URL(url).pathname
-    return path.startsWith("/products/") || path.startsWith("/collections/") || path.startsWith("/blogs/")
+    const p = new URL(url).pathname
+    return p.startsWith("/products/") || p.startsWith("/collections/") || p.startsWith("/blogs/")
   })
 }
 
@@ -44,51 +44,72 @@ function shouldKeep(url, options, robotsRules, baseUrl) {
   if (isExcluded(url, options.exclude)) return false
 
   const basePath = new URL(baseUrl).pathname
-  const depth = getPathDepth(url, basePath)
-  if (depth > options.depth) return false
+  if (getPathDepth(url, basePath) > options.depth) return false
 
   return true
 }
 
+/**
+ * BFS crawl with Playwright.  Uses multiple pages for concurrency.
+ */
 async function crawlByLinks(baseUrl, options, robotsRules, logger) {
+  const concurrency = Math.min(options.concurrency || 4, 8)
   const browser = await chromium.launch({ headless: options.headless })
-  const page = await browser.newPage()
 
   const visited = new Set()
   const output = []
   const queue = [{ url: normalizeUrl(baseUrl), depth: 0 }]
 
-  while (queue.length > 0 && output.length < options.maxPages) {
-    const next = queue.shift()
-    if (!next?.url) continue
+  function nextFromQueue() {
+    while (queue.length > 0) {
+      const item = queue.shift()
+      if (!item?.url || visited.has(item.url)) continue
+      visited.add(item.url)
+      if (!shouldKeep(item.url, options, robotsRules, baseUrl)) continue
+      return item
+    }
+    return null
+  }
 
-    if (visited.has(next.url)) continue
-    visited.add(next.url)
-
-    if (!shouldKeep(next.url, options, robotsRules, baseUrl)) continue
-    output.push(next.url)
-
-    logger.progress("Crawling page", output.length, options.maxPages)
-
+  async function crawlWorker() {
+    const page = await browser.newPage()
     try {
-      await page.goto(next.url, { waitUntil: "domcontentloaded", timeout: options.timeout })
-      await page.waitForLoadState("networkidle", { timeout: Math.min(options.timeout, 6000) }).catch(() => {})
+      while (output.length < options.maxPages) {
+        const next = nextFromQueue()
+        if (!next) break
 
-      if (next.depth >= options.depth) continue
+        output.push(next.url)
+        logger.progress("Crawling page", output.length, options.maxPages)
 
-      const links = await page.$$eval("a[href]", (anchors) => anchors.map((anchor) => anchor.getAttribute("href")))
-      for (const href of links) {
-        const normalized = normalizeUrl(href, next.url)
-        if (!normalized || visited.has(normalized)) continue
-        queue.push({ url: normalized, depth: next.depth + 1 })
+        try {
+          await page.goto(next.url, { waitUntil: "domcontentloaded", timeout: options.timeout })
+          await page.waitForLoadState("networkidle", { timeout: Math.min(options.timeout, 6000) }).catch(() => {})
+
+          if (next.depth < options.depth) {
+            const links = await page.$$eval("a[href]", (anchors) => anchors.map((a) => a.getAttribute("href")))
+            for (const href of links) {
+              const normalized = normalizeUrl(href, next.url)
+              if (normalized && !visited.has(normalized) && shouldKeep(normalized, options, robotsRules, baseUrl)) {
+                queue.push({ url: normalized, depth: next.depth + 1 })
+              }
+            }
+          }
+        } catch {
+          logger.warn(`Could not crawl ${next.url}`)
+        }
       }
-    } catch {
-      logger.warn(`Could not crawl ${next.url}`)
+    } finally {
+      await page.close().catch(() => {})
     }
   }
 
-  await page.close()
-  await browser.close()
+  try {
+    const workers = Array.from({ length: concurrency }, () => crawlWorker())
+    await Promise.all(workers)
+  } finally {
+    await browser.close().catch(() => {})
+  }
+
   return output
 }
 

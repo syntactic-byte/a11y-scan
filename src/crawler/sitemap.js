@@ -1,9 +1,8 @@
-import fetch from "node-fetch"
 import { parseStringPromise } from "xml2js"
-import { normalizeUrl } from "../utils/url-utils.js"
+import { normalizeUrl, fetchWithTimeout } from "../utils/url-utils.js"
 
 async function readXml(url) {
-  const response = await fetch(url)
+  const response = await fetchWithTimeout(url, 15000)
   if (!response.ok) throw new Error(`Failed to fetch sitemap ${url}`)
   const text = await response.text()
   return parseStringPromise(text)

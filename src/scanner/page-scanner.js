@@ -17,24 +17,21 @@ async function runKeyboardCheck(page) {
     if (hasFocus) changedFocus += 1
   }
 
-  return {
-    focusableCount,
-    tabStopsReached: changedFocus
-  }
+  return { focusableCount, tabStopsReached: changedFocus }
 }
 
 async function runAriaCheck(page) {
+  // Validates ARIA attribute *names* against the spec pattern.
+  // Does not validate whether an attribute is appropriate for its role –
+  // axe-core handles that via its own rules.
   const invalidAriaAttributes = await page.evaluate(() => {
-    const validPrefix = /^aria-[a-z-]+$/
-    const allElements = Array.from(document.querySelectorAll("*"))
+    const VALID = /^aria-[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$/
     let invalid = 0
-
-    for (const element of allElements) {
-      for (const name of element.getAttributeNames()) {
-        if (name.startsWith("aria-") && !validPrefix.test(name)) invalid += 1
+    for (const el of document.querySelectorAll("*")) {
+      for (const name of el.getAttributeNames()) {
+        if (name.startsWith("aria-") && !VALID.test(name)) invalid += 1
       }
     }
-
     return invalid
   })
 
@@ -58,13 +55,13 @@ async function scanSinglePage(page, url, options) {
   const start = Date.now()
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: options.timeout })
   await page.waitForLoadState("networkidle", { timeout: Math.min(options.timeout, 7000) }).catch(() => {})
-  await page.waitForTimeout(300)
 
-  const [title, violations] = await Promise.all([
+  const [title, axeResults] = await Promise.all([
     page.title(),
-    runAxe(page, options.locale)
+    runAxe(page, options.locale, options.wcagLevel)
   ])
 
+  const { violations, passes, incomplete, inapplicable, rulesRun } = axeResults
   const checks = {}
   if (options.checkKeyboard) checks.keyboard = await runKeyboardCheck(page)
   if (options.checkAria) checks.aria = await runAriaCheck(page)
@@ -83,6 +80,10 @@ async function scanSinglePage(page, url, options) {
     scannedAt: new Date().toISOString(),
     durationMs: Date.now() - start,
     violations,
+    passes,
+    incomplete,
+    inapplicable,
+    rulesRun,
     checks
   }
 }
@@ -95,30 +96,40 @@ export async function scanPages(urls, options, logger) {
     headless: options.headless
   })
 
-  await pool.init()
+  try {
+    await pool.init()
 
-  const results = await pool.run(urls, async ({ context, url, index }) => {
-    logger.progress("Scanning page", index + 1, urls.length)
-    const page = await context.newPage()
-    try {
-      const result = await scanSinglePage(page, url, options)
-      await page.close()
-      return result
-    } catch (error) {
-      await page.close()
-      return {
-        url,
-        title: "",
-        status: "error",
-        scannedAt: new Date().toISOString(),
-        durationMs: 0,
-        violations: [],
-        checks: {},
-        error: error.message
+    const results = await pool.run(urls, async ({ context, url, index }) => {
+      logger.progress("Scanning page", index + 1, urls.length)
+      const page = await context.newPage()
+      try {
+        const result = await scanSinglePage(page, url, options)
+        await page.close()
+        if (options.onPageResult) await options.onPageResult(result)
+        return result
+      } catch (error) {
+        await page.close().catch(() => {})
+        const failed = {
+          url,
+          title: "",
+          status: "error",
+          scannedAt: new Date().toISOString(),
+          durationMs: 0,
+          violations: [],
+          passes: [],
+          incomplete: [],
+          inapplicable: [],
+          rulesRun: [],
+          checks: {},
+          error: error.message
+        }
+        if (options.onPageResult) await options.onPageResult(failed)
+        return failed
       }
-    }
-  })
+    })
 
-  await pool.close()
-  return results
+    return results
+  } finally {
+    await pool.close().catch(() => {})
+  }
 }

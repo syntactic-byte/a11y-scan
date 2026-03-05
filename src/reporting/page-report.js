@@ -1,29 +1,15 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { safeSlug } from "../utils/url-utils.js"
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-}
-
-function templateFolder(template) {
-  if (template === "home") return "home"
-  if (template === "product") return "products"
-  if (template === "collection") return "collections"
-  if (template === "blog") return "blogs"
-  return "pages"
-}
+import { safeSlug, templateFolder, escapeHtml } from "../utils/url-utils.js"
 
 function renderPageHtml(page) {
   const rows = page.violations.map((violation) => {
+    const remaining = violation.nodes.length - 6
     const nodes = violation.nodes
       .slice(0, 6)
       .map((node) => `<li><code>${escapeHtml((node.target || []).join(" "))}</code></li>`)
       .join("")
+    const more = remaining > 0 ? `<li class="muted">and ${remaining} more</li>` : ""
 
     return `
       <article class="issue impact-${escapeHtml(violation.impact)}">
@@ -33,7 +19,7 @@ function renderPageHtml(page) {
           <a href="${escapeHtml(violation.helpUrl)}" target="_blank" rel="noreferrer">WCAG documentation</a>
         </header>
         <p>${escapeHtml(violation.description)}</p>
-        <ul>${nodes}</ul>
+        <ul>${nodes}${more}</ul>
       </article>
     `
   }).join("")
@@ -55,6 +41,7 @@ function renderPageHtml(page) {
     .impact-moderate{border-left-color:#1d4ed8}
     .impact-minor{border-left-color:#166534}
     code{background:#f3f4f6;padding:0.1rem 0.2rem;border-radius:4px}
+    .muted{color:#6b7280}
   </style>
 </head>
 <body>

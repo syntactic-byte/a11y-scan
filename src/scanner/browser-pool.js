@@ -35,9 +35,17 @@ export class BrowserPool {
   }
 
   async close() {
+    const errors = []
     for (const context of this.contexts) {
-      await context.close()
+      try { await context.close() } catch (error) { errors.push(error) }
     }
-    if (this.browser) await this.browser.close()
+    if (this.browser) {
+      try { await this.browser.close() } catch (error) { errors.push(error) }
+    }
+    this.contexts = []
+    this.browser = null
+    if (errors.length > 0) {
+      throw new AggregateError(errors, `Failed to close ${errors.length} browser resource(s)`)
+    }
   }
 }

@@ -43,17 +43,12 @@ export function isSameDomain(a, b) {
   }
 }
 
-export function isHttpUrl(value) {
-  return typeof value === "string" && /^https?:\/\//i.test(value)
-}
-
 function isPatternMatch(url, pattern) {
   const haystack = url.toLowerCase()
   const needle = pattern.toLowerCase()
   if (needle.startsWith("re:")) {
     try {
-      const regex = new RegExp(needle.slice(3), "i")
-      return regex.test(url)
+      return new RegExp(needle.slice(3), "i").test(url)
     } catch {
       return false
     }
@@ -84,4 +79,60 @@ export function safeSlug(input) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 180) || "page"
+}
+
+/**
+ * Detect template type from a URL pathname.
+ * Shared by analysis and live-state to avoid drift.
+ */
+export function detectTemplate(url) {
+  try {
+    const pathname = new URL(url).pathname
+    if (pathname === "/") return "home"
+    if (pathname.startsWith("/products/")) return "product"
+    if (pathname.startsWith("/collections/")) return "collection"
+    if (pathname.startsWith("/blogs/")) return "blog"
+    if (pathname.startsWith("/pages/")) return "page"
+    return "page"
+  } catch {
+    return "page"
+  }
+}
+
+/**
+ * Map template name to report output folder.
+ * Shared by page-report, rule-report, and template-report.
+ */
+export function templateFolder(template) {
+  if (template === "home") return "home"
+  if (template === "product") return "products"
+  if (template === "collection") return "collections"
+  if (template === "blog") return "blogs"
+  return "pages"
+}
+
+/**
+ * Escape a string for safe insertion into HTML.
+ */
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+/**
+ * Fetch with an AbortController timeout (default 15 s).
+ * Uses the global fetch available in Node 18+.
+ */
+export async function fetchWithTimeout(url, timeoutMs = 15000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
 }

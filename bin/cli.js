@@ -17,17 +17,27 @@ function normalizePatterns(values) {
     .filter(Boolean)
 }
 
+function normalizeWcagLevel(value) {
+  const level = String(value || "AAA").trim().toUpperCase()
+  if (!["A", "AA", "AAA"].includes(level)) {
+    console.error(`Error: --wcag-level must be one of: A, AA, AAA (received "${value}")`)
+    process.exit(1)
+  }
+  return level
+}
+
 const program = new Command()
 
 program
   .name("a11y-scan")
   .description("Large-scale accessibility scanner powered by Playwright + axe-core")
-  .argument("[url]", "target URL")
+  .argument("[url]", "target URL (required for CLI, optional for dashboard mode)")
   .option("--max-pages <number>", "maximum pages to scan", (v) => parseNumber(v, 2000), 2000)
   .option("--concurrency <number>", "parallel page scans", (v) => parseNumber(v, 10), 10)
-  .option("--exclude <patterns...>", "exclude URL patterns")
-  .option("--include <patterns...>", "include URL patterns")
-  .option("--locale <locale>", "axe locale", "en")
+  .option("--exclude <patterns...>", "exclude URL patterns (supports re: prefix for regex)")
+  .option("--include <patterns...>", "include URL patterns (supports re: prefix for regex)")
+  .option("--locale <locale>", "axe locale (reserved for future use)", "en")
+  .option("--wcag-level <level>", "WCAG conformance level: A, AA, AAA (default: AAA)", normalizeWcagLevel, "AAA")
   .option("--sitemap <url>", "explicit sitemap URL")
   .option("--depth <number>", "crawl depth", (v) => parseNumber(v, 6), 6)
   .option("--report-dir <dir>", "output directory", "./a11y-report")
@@ -36,13 +46,13 @@ program
   .option("--timeout <ms>", "page timeout in milliseconds", (v) => parseNumber(v, 30000), 30000)
   .option("--headless", "run browser in headless mode", true)
   .option("--no-headless", "run browser with UI")
-  .option("--fail-on-critical", "exit non-zero when critical issues exist", false)
-  .option("--fail-on-serious", "exit non-zero when serious issues exist", false)
-  .option("--check-keyboard", "run keyboard traversal checks", false)
-  .option("--check-aria", "run ARIA attribute checks", false)
-  .option("--check-focus-order", "run focus order checks", false)
+  .option("--fail-on-critical", "exit code 2 when critical issues exist", false)
+  .option("--fail-on-serious", "exit code 2 when serious issues exist", false)
+  .option("--check-keyboard", "run keyboard traversal checks", true)
+  .option("--check-aria", "run ARIA attribute checks", true)
+  .option("--check-focus-order", "run focus order checks", true)
   .option("--contrast-screenshots", "capture screenshots for color contrast issues", false)
-  .option("--dashboard", "serve the generated dashboard", false)
+  .option("--dashboard", "serve the interactive dashboard (can start scans from UI)", false)
   .option("--port <number>", "dashboard server port", (v) => parseNumber(v, 4173), 4173)
   .action(async (url, options) => {
     const normalizedOptions = {
@@ -51,24 +61,32 @@ program
       include: normalizePatterns(options.include)
     }
 
-    if (!url && !options.dashboard) {
-      throw new Error("Provide a URL to scan or use --dashboard to serve existing reports")
-    }
-
-    if (url) {
-      const result = await runScan(url, normalizedOptions)
-
-      if (result.exitCode > 0) {
-        process.exitCode = result.exitCode
-      }
-    }
-
     if (options.dashboard) {
-      await serveDashboard({
-        reportDir: options.reportDir,
-        port: options.port
+      await serveDashboard({ 
+        reportDir: options.reportDir, 
+        port: options.port,
+        defaultOptions: normalizedOptions
       })
+      return
     }
+
+    if (!url) {
+      console.error("Error: Provide a URL to scan, or use --dashboard for interactive mode")
+      console.error("  a11y-scan https://example.com")
+      console.error("  a11y-scan --dashboard")
+      process.exit(1)
+    }
+
+    const result = await runScan(url, normalizedOptions)
+
+    if (result.exitCode > 0) {
+      process.exitCode = result.exitCode
+    }
+
+    process.exit(process.exitCode || 0)
   })
 
-program.parseAsync(process.argv)
+program.parseAsync(process.argv).catch((error) => {
+  console.error(`Error: ${error.message}`)
+  process.exit(1)
+})

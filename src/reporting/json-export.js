@@ -26,20 +26,19 @@ export async function exportJsonAndCsv(reportDir, payload) {
   await writeJson(path.join(rawDir, "templates.json"), payload.templateSummary)
   await writeJson(path.join(rawDir, "scan-logs.json"), payload.logs)
 
+  // CSV: use node counts for both "violations" column and per-severity columns
+  // so the numbers are internally consistent.
   const rows = [
     ["url", "title", "status", "template", "violations", "critical", "serious", "moderate", "minor"]
   ]
 
   for (const page of payload.pages) {
-    const impacts = {
-      critical: 0,
-      serious: 0,
-      moderate: 0,
-      minor: 0
-    }
+    const impacts = { critical: 0, serious: 0, moderate: 0, minor: 0 }
+    let totalNodeCount = 0
 
     for (const violation of page.violations) {
       const count = Math.max(1, violation.nodes.length)
+      totalNodeCount += count
       if (Object.hasOwn(impacts, violation.impact)) {
         impacts[violation.impact] += count
       }
@@ -50,7 +49,7 @@ export async function exportJsonAndCsv(reportDir, payload) {
       page.title,
       page.status,
       page.template,
-      page.violations.length,
+      totalNodeCount,
       impacts.critical,
       impacts.serious,
       impacts.moderate,
@@ -58,6 +57,8 @@ export async function exportJsonAndCsv(reportDir, payload) {
     ])
   }
 
-  const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\n")
+  // UTF-8 BOM for Excel compatibility
+  const bom = "\uFEFF"
+  const csv = bom + rows.map((row) => row.map(escapeCsv).join(",")).join("\n")
   await fs.writeFile(path.join(rawDir, "results.csv"), csv, "utf8")
 }
