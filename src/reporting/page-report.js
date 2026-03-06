@@ -30,30 +30,144 @@ function renderPageHtml(page) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>${escapeHtml(page.url)} - a11y-scan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>
-    body{font-family:Georgia,serif;background:#f6f6f1;color:#171717;margin:0;padding:2rem}
-    main{max-width:1000px;margin:0 auto}
-    .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.2rem}
-    .card{background:#fff;border:1px solid #ddd;padding:1rem;border-radius:10px}
-    .issue{background:#fff;border:1px solid #ddd;border-left:6px solid #7c5f00;padding:1rem;border-radius:10px;margin-bottom:1rem}
-    .impact-critical{border-left-color:#8f1d14}
-    .impact-serious{border-left-color:#b45309}
-    .impact-moderate{border-left-color:#1d4ed8}
-    .impact-minor{border-left-color:#166534}
-    code{background:#f3f4f6;padding:0.1rem 0.2rem;border-radius:4px}
-    .muted{color:#6b7280}
+    :root {
+      --bg: #08131d;
+      --panel: rgba(12, 29, 42, 0.84);
+      --panel-strong: rgba(10, 24, 35, 0.96);
+      --stroke: rgba(157, 197, 220, 0.22);
+      --text: #e9f2f8;
+      --muted: #9fb4c3;
+      --accent: #2dd4bf;
+      --accent-2: #38bdf8;
+      --radius: 14px;
+      --shadow: 0 10px 35px rgba(2, 8, 14, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(1300px 600px at 8% -12%, rgba(45, 212, 191, 0.2), transparent 60%),
+        radial-gradient(1000px 500px at 95% 0%, rgba(56, 189, 248, 0.2), transparent 64%),
+        linear-gradient(160deg, #051019 0%, #0a1823 42%, #0e1f2f 100%);
+      min-height: 100vh;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.6rem 1.2rem 3rem;
+    }
+
+    h1 {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+      word-break: break-all;
+      margin: 0 0 1.2rem;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.84rem;
+      color: var(--accent-2);
+      margin-bottom: 0.65rem;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.85rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .card {
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(12, 30, 44, 0.85), rgba(9, 23, 35, 0.9));
+      box-shadow: var(--shadow);
+      padding: 0.95rem;
+    }
+
+    .card-label {
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .card-value {
+      margin-top: 0.3rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      font-family: "Space Grotesk", sans-serif;
+    }
+
+    .issue {
+      border: 1px solid var(--stroke);
+      border-left: 5px solid var(--muted);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, var(--panel), var(--panel-strong));
+      box-shadow: var(--shadow);
+      padding: 1rem 1.2rem;
+      margin-bottom: 1rem;
+    }
+
+    .issue header { margin-bottom: 0.5rem; }
+    .issue h3 {
+      margin: 0 0 0.2rem;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1rem;
+    }
+    .issue p { margin: 0.3rem 0; font-size: 0.88rem; color: var(--muted); }
+    .issue ul { padding-left: 1.2rem; margin: 0.5rem 0 0; }
+    .issue li { margin-bottom: 0.3rem; font-size: 0.84rem; }
+
+    .impact-critical { border-left-color: #ef4444; }
+    .impact-serious  { border-left-color: #fb923c; }
+    .impact-moderate { border-left-color: #facc15; }
+    .impact-minor    { border-left-color: #60a5fa; }
+    .impact-unknown  { border-left-color: #9ca3af; }
+
+    a { color: var(--accent-2); }
+    a:visited { color: #a78bfa; }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      background: rgba(8, 23, 36, 0.9);
+      border: 1px solid rgba(120, 158, 182, 0.25);
+      border-radius: 5px;
+      padding: 0.06rem 0.26rem;
+    }
+
+    .muted { color: var(--muted); }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+
+    @media (max-width: 700px) {
+      .meta { grid-template-columns: 1fr 1fr; }
+    }
   </style>
 </head>
 <body>
   <main>
+    <a class="back-link" href="../../report.html">\u2190 Back to Report</a>
     <h1>${escapeHtml(page.url)}</h1>
     <div class="meta">
-      <div class="card"><strong>Template</strong><br/>${escapeHtml(page.template)}</div>
-      <div class="card"><strong>Status</strong><br/>${escapeHtml(page.status)}</div>
-      <div class="card"><strong>Violations</strong><br/>${page.violations.length}</div>
-      <div class="card"><strong>Scan Time</strong><br/>${page.durationMs} ms</div>
+      <div class="card"><div class="card-label">Template</div><div class="card-value">${escapeHtml(page.template)}</div></div>
+      <div class="card"><div class="card-label">Status</div><div class="card-value">${escapeHtml(page.status)}</div></div>
+      <div class="card"><div class="card-label">Violations</div><div class="card-value" style="color:#ef4444">${page.violations.length}</div></div>
+      <div class="card"><div class="card-label">Scan Time</div><div class="card-value">${page.durationMs} ms</div></div>
     </div>
-    ${rows || "<p>No violations found.</p>"}
+    ${rows || '<p class="empty">No violations found.</p>'}
   </main>
 </body>
 </html>`

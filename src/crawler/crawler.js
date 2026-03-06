@@ -113,15 +113,34 @@ async function crawlByLinks(baseUrl, options, robotsRules, logger) {
   return output
 }
 
+async function resolveBaseUrl(url, logger) {
+  try {
+    const response = await fetch(url, { method: "HEAD", redirect: "follow" })
+    const resolved = normalizeUrl(response.url)
+    if (resolved && resolved !== url) {
+      logger.info(`Resolved ${url} → ${resolved}`)
+    }
+    return resolved || url
+  } catch {
+    return url
+  }
+}
+
 export async function discoverUrls(baseUrl, options, logger) {
-  const normalizedBase = normalizeUrl(baseUrl)
+  let normalizedBase = normalizeUrl(baseUrl)
   if (!normalizedBase) throw new Error("Invalid target URL")
 
+  normalizedBase = await resolveBaseUrl(normalizedBase, logger)
   const robotsRules = await fetchRobots(normalizedBase)
   logger.info("Discovering URLs via sitemap.xml")
   let urls = await discoverUrlsFromSitemaps(normalizedBase, options.sitemap, robotsRules, logger)
+  logger.info(`Sitemap discovery found ${urls.length} raw URLs`)
 
+  const beforeFilter = urls.length
   urls = urls.filter((url) => shouldKeep(url, options, robotsRules, normalizedBase))
+  if (beforeFilter > 0 && urls.length < beforeFilter) {
+    logger.info(`Filtered to ${urls.length}/${beforeFilter} URLs (depth=${options.depth}, include/exclude/robots rules)`)
+  }
 
   if (urls.length === 0) {
     logger.warn("No sitemap URLs found, using Playwright BFS crawl")
@@ -129,6 +148,10 @@ export async function discoverUrls(baseUrl, options, logger) {
   }
 
   const sampled = applyShopifySampling(urls, options.sampleTemplates)
+  if (sampled.length < urls.length) {
+    logger.info(`Shopify sampling reduced ${urls.length} URLs to ${sampled.length} (sampleTemplates=${options.sampleTemplates})`)
+  }
+
   const trimmed = sampled.slice(0, options.maxPages)
   return [...new Set(trimmed)]
 }

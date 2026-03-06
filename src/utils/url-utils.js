@@ -35,9 +35,13 @@ export function normalizeUrl(input, baseUrl) {
   }
 }
 
+function stripWww(hostname) {
+  return hostname.startsWith("www.") ? hostname.slice(4) : hostname
+}
+
 export function isSameDomain(a, b) {
   try {
-    return new URL(a).hostname === new URL(b).hostname
+    return stripWww(new URL(a).hostname) === stripWww(new URL(b).hostname)
   } catch {
     return false
   }
