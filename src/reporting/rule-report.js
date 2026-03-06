@@ -4,17 +4,14 @@ import { safeSlug, templateFolder, escapeHtml } from "../utils/url-utils.js"
 
 function renderRulePage(rule) {
   const rows = rule.pages.map((entry) => {
-    const remaining = entry.nodes.length - 5
     const nodes = entry.nodes
-      .slice(0, 5)
       .map((node) => `<li><code>${escapeHtml((node.target || []).join(" "))}</code></li>`)
       .join("")
-    const more = remaining > 0 ? `<li class="muted">and ${remaining} more</li>` : ""
 
     return `<tr>
       <td><a href="../pages/${templateFolder(entry.template)}/${safeSlug(entry.url)}.html">${escapeHtml(entry.url)}</a></td>
       <td>${escapeHtml(entry.impact)}</td>
-      <td><ul>${nodes}${more}</ul></td>
+      <td><ul>${nodes}</ul></td>
     </tr>`
   }).join("")
 

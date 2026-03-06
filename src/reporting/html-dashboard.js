@@ -255,6 +255,22 @@ const DASHBOARD_HTML = `<!doctype html>
       font-weight: 600;
     }
 
+    .btn-stop {
+      background: linear-gradient(90deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+      border-color: rgba(239, 68, 68, 0.5);
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.84rem;
+    }
+
+    .btn-resume {
+      background: linear-gradient(90deg, rgba(45, 212, 191, 0.9), rgba(56, 189, 248, 0.85));
+      border-color: rgba(45, 212, 191, 0.5);
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.84rem;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -400,6 +416,8 @@ const DASHBOARD_HTML = `<!doctype html>
       <p>Streaming accessibility findings for large websites, with rule-level drilldowns and page troubleshooting.</p>
       <div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-top:0.85rem">
         <div class="status-pill"><span class="dot"></span><span id="scanStatus">Waiting for scan data...</span></div>
+        <button id="stopScanBtn" type="button" class="btn-stop" style="display:none">Stop Scan</button>
+        <button id="resumeScanBtn" type="button" class="btn-resume" style="display:none">Resume Scan</button>
         <a id="viewReportBtn" href="./report.html" style="display:none;padding:0.35rem 0.85rem;border-radius:999px;background:linear-gradient(90deg,rgba(45,212,191,0.9),rgba(56,189,248,0.85));color:#032430;font-weight:700;font-size:0.84rem;text-decoration:none">View Report →</a>
       </div>
     </header>
@@ -434,6 +452,13 @@ const DASHBOARD_HTML = `<!doctype html>
         <div class="scan-field">
           <label for="scanConcurrency">Concurrency</label>
           <input id="scanConcurrency" type="number" value="10" min="1" max="50" />
+        </div>
+        <div class="scan-field scan-field--wide">
+          <label for="scanReportDir">Report Directory <span class="scan-hint">(where reports are saved)</span></label>
+          <div style="display:flex;gap:0.4rem">
+            <input id="scanReportDir" type="text" placeholder="./a11y-report" style="flex:1" />
+            <button id="applyReportDir" type="button" class="ghost" style="white-space:nowrap">Apply</button>
+          </div>
         </div>
         <div class="scan-field scan-field--wide">
           <label for="scanInclude">Include Patterns <span class="scan-hint">(comma-separated, e.g. /products/)</span></label>
@@ -676,6 +701,72 @@ const DASHBOARD_HTML = `<!doctype html>
       }
     })
 
+    // --- stop scan button ---
+    document.getElementById('stopScanBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('stopScanBtn')
+      btn.disabled = true
+      btn.textContent = 'Stopping...'
+      try {
+        await fetch('/api/scan/stop', { method: 'POST' })
+      } catch {}
+      btn.disabled = false
+      btn.textContent = 'Stop Scan'
+    })
+
+    // --- resume scan button ---
+    document.getElementById('resumeScanBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('resumeScanBtn')
+      btn.disabled = true
+      btn.textContent = 'Resuming...'
+      try {
+        const res = await fetch('/api/scan/resume', { method: 'POST' })
+        const data = await res.json()
+        if (res.ok) {
+          document.getElementById('scanFormWrap').open = false
+          document.getElementById('viewReportBtn').style.display = 'none'
+          if (!pollTimer) pollTimer = setInterval(refresh, 1500)
+          refresh()
+        } else {
+          alert('Resume failed: ' + (data.error || res.statusText))
+        }
+      } catch (err) {
+        alert('Resume failed: ' + err.message)
+      }
+      btn.disabled = false
+      btn.textContent = 'Resume Scan'
+    })
+
+    // --- report directory ---
+    fetch('/api/report-dir').then(r => r.json()).then(data => {
+      document.getElementById('scanReportDir').value = data.reportDir || ''
+    }).catch(() => {})
+
+    document.getElementById('applyReportDir').addEventListener('click', async () => {
+      const input = document.getElementById('scanReportDir')
+      const dir = input.value.trim()
+      if (!dir) return
+      const btn = document.getElementById('applyReportDir')
+      btn.disabled = true
+      try {
+        const res = await fetch('/api/report-dir', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ dir })
+        })
+        const data = await res.json()
+        if (res.ok) {
+          input.value = data.reportDir
+          btn.textContent = 'Applied!'
+          setTimeout(() => { btn.textContent = 'Apply' }, 1500)
+        } else {
+          alert('Error: ' + (data.error || res.statusText))
+        }
+      } catch (err) {
+        alert('Error: ' + err.message)
+      }
+      btn.disabled = false
+    })
+
     // --- utilities ---
     function renderBars(el, values) {
       const entries = Object.entries(values || {})
@@ -895,13 +986,19 @@ const DASHBOARD_HTML = `<!doctype html>
 
         if (statusRes && statusRes.ok) {
           const s = await statusRes.json()
-          const btn = document.getElementById('startScanBtn')
+          const startBtn = document.getElementById('startScanBtn')
+          const stopBtn = document.getElementById('stopScanBtn')
+          const resumeBtn = document.getElementById('resumeScanBtn')
           if (s.scanRunning) {
-            btn.disabled = true
-            btn.textContent = 'Scanning...'
+            startBtn.disabled = true
+            startBtn.textContent = 'Scanning...'
+            stopBtn.style.display = 'inline-block'
+            resumeBtn.style.display = 'none'
           } else {
-            btn.disabled = false
-            btn.textContent = 'Start Scan'
+            startBtn.disabled = false
+            startBtn.textContent = 'Start Scan'
+            stopBtn.style.display = 'none'
+            resumeBtn.style.display = s.canResume ? 'inline-block' : 'none'
           }
         }
 
@@ -981,6 +1078,9 @@ const DASHBOARD_HTML = `<!doctype html>
           const dot = document.querySelector('.dot')
           if (dot) { dot.style.animation = 'none'; dot.style.background = '#22c55e' }
           document.getElementById('viewReportBtn').style.display = 'inline-block'
+        } else if (data.status === 'stopped') {
+          const dot = document.querySelector('.dot')
+          if (dot) { dot.style.animation = 'none'; dot.style.background = '#fb923c' }
         }
       } catch {
         document.getElementById('scanStatus').textContent = 'Waiting for first scan update...'

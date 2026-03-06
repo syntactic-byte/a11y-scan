@@ -4,12 +4,9 @@ import { safeSlug, templateFolder, escapeHtml } from "../utils/url-utils.js"
 
 function renderPageHtml(page) {
   const rows = page.violations.map((violation) => {
-    const remaining = violation.nodes.length - 6
     const nodes = violation.nodes
-      .slice(0, 6)
       .map((node) => `<li><code>${escapeHtml((node.target || []).join(" "))}</code></li>`)
       .join("")
-    const more = remaining > 0 ? `<li class="muted">and ${remaining} more</li>` : ""
 
     return `
       <article class="issue impact-${escapeHtml(violation.impact)}">
@@ -19,7 +16,7 @@ function renderPageHtml(page) {
           <a href="${escapeHtml(violation.helpUrl)}" target="_blank" rel="noreferrer">WCAG documentation</a>
         </header>
         <p>${escapeHtml(violation.description)}</p>
-        <ul>${nodes}${more}</ul>
+        <ul>${nodes}</ul>
       </article>
     `
   }).join("")
