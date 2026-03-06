@@ -103,6 +103,7 @@ export async function runScan(targetUrl, options) {
   const templateSummary = buildTemplateSummary(resultsWithTemplates)
 
   const summary = {
+    targetUrl,
     scannedPages: resultsWithTemplates.length,
     totalViolations: severitySummary.totalViolations,
     totalRulesTriggered: Object.keys(ruleSummary.rules).length,

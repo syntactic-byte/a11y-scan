@@ -324,20 +324,47 @@ const DASHBOARD_HTML = `<!doctype html>
     .scan-form-wrap[open] summary::before { transform: rotate(90deg); }
 
     .scan-form {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.55rem;
-      align-items: center;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.65rem 0.75rem;
       padding: 0 1rem 0.85rem;
     }
 
-    .scan-form input[type="url"] { flex: 1 1 240px; }
-    .scan-form input[type="number"] { width: 110px; }
+    .scan-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.28rem;
+    }
+
+    .scan-field--url { grid-column: 1 / -1; }
+    .scan-field--wide { grid-column: span 2; }
+
+    .scan-field label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .scan-hint {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 0.72rem;
+    }
+
+    .scan-form-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding-top: 0.35rem;
+    }
 
     #scanFormMsg {
       font-size: 0.84rem;
       color: var(--accent);
-      flex-basis: 100%;
     }
 
     #scanFormMsg.error { color: var(--critical); }
@@ -380,16 +407,46 @@ const DASHBOARD_HTML = `<!doctype html>
     <details class="scan-form-wrap" id="scanFormWrap">
       <summary>Start New Scan</summary>
       <div class="scan-form">
-        <input id="scanUrl" type="url" placeholder="https://example.com" aria-label="Target URL" />
-        <select id="scanWcag" aria-label="WCAG level">
-          <option value="AAA">WCAG AAA</option>
-          <option value="AA">WCAG AA</option>
-          <option value="A">WCAG A</option>
-        </select>
-        <input id="scanMaxPages" type="number" value="2000" min="1" max="50000" aria-label="Max pages" title="Max pages" />
-        <input id="scanSampleTemplate" type="number" value="0" min="0" max="100" aria-label="Sample template (0 = off)" title="Sample template (0 = off)" />
-        <button id="startScanBtn" type="button">Start Scan</button>
-        <span id="scanFormMsg" role="status" aria-live="polite"></span>
+        <div class="scan-field scan-field--url">
+          <label for="scanUrl">Target URL *</label>
+          <input id="scanUrl" type="url" placeholder="https://example.com" />
+        </div>
+        <div class="scan-field">
+          <label for="scanWcag">WCAG Level</label>
+          <select id="scanWcag">
+            <option value="AAA">AAA (strictest)</option>
+            <option value="AA">AA</option>
+            <option value="A">A</option>
+          </select>
+        </div>
+        <div class="scan-field">
+          <label for="scanMaxPages">Max Pages</label>
+          <input id="scanMaxPages" type="number" value="2000" min="1" max="50000" />
+        </div>
+        <div class="scan-field">
+          <label for="scanSampleTemplate">Sample per Template <span class="scan-hint">(0 = off)</span></label>
+          <input id="scanSampleTemplate" type="number" value="0" min="0" max="100" />
+        </div>
+        <div class="scan-field">
+          <label for="scanDepth">Crawl Depth</label>
+          <input id="scanDepth" type="number" value="6" min="1" max="20" />
+        </div>
+        <div class="scan-field">
+          <label for="scanConcurrency">Concurrency</label>
+          <input id="scanConcurrency" type="number" value="10" min="1" max="50" />
+        </div>
+        <div class="scan-field scan-field--wide">
+          <label for="scanInclude">Include Patterns <span class="scan-hint">(comma-separated, e.g. /products/)</span></label>
+          <input id="scanInclude" type="text" placeholder="/products/, /blog/" />
+        </div>
+        <div class="scan-field scan-field--wide">
+          <label for="scanExclude">Exclude Patterns <span class="scan-hint">(comma-separated, e.g. /admin/)</span></label>
+          <input id="scanExclude" type="text" placeholder="/admin/, /cart/" />
+        </div>
+        <div class="scan-form-actions">
+          <button id="startScanBtn" type="button">Start Scan</button>
+          <span id="scanFormMsg" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </details>
 
@@ -550,9 +607,13 @@ const DASHBOARD_HTML = `<!doctype html>
   </div>
 
   <script>
-    let selectedRuleFile = ''
-    let selectedRuleId = ''
-    let cachedRuleData = null
+    // --- explorer state per tab ---
+    const explorerState = {
+      rule:         { ruleFile: '__all__', ruleId: '', cache: null },
+      pass:         { ruleFile: '__all__', ruleId: '', cache: null },
+      incomplete:   { ruleFile: '__all__', ruleId: '', cache: null },
+      inapplicable: { ruleFile: '__all__', ruleId: '', cache: null }
+    }
 
     function activateTab(view) {
       for (const tab of document.querySelectorAll('.tab')) {
@@ -569,270 +630,17 @@ const DASHBOARD_HTML = `<!doctype html>
       tab.addEventListener('click', () => activateTab(tab.dataset.view))
     }
 
-    function renderBars(el, values) {
-      const entries = Object.entries(values || {})
-      if (entries.length === 0) {
-        el.innerHTML = '<span class="muted">No data yet</span>'
-        return
-      }
-
-      const max = Math.max(...entries.map(([, value]) => value), 1)
-      el.innerHTML = entries.map(([label, value]) => {
-        const width = Math.round((value / max) * 100)
-        return '<div class="bar-row"><span>' + label + '</span><div class="bar" role="meter" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '" aria-label="' + label + '"><span style="width:' + width + '%"></span></div><strong>' + value + '</strong></div>'
-      }).join('')
-    }
-
-    function setRows(el, rowsHtml, emptyText, colspan) {
-      el.innerHTML = rowsHtml || '<tr><td class="muted" colspan="' + (colspan || 3) + '">' + emptyText + '</td></tr>'
-    }
-
-    function escapeHtml(value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-    }
-
-    async function showPageDetails(path) {
-      const box = document.getElementById('pageDetails')
-      box.textContent = 'Loading page details...'
-
-      try {
-        const response = await fetch('./' + path + '?ts=' + Date.now(), { cache: 'no-store' })
-        const page = await response.json()
-
-        const issues = (page.violations || []).map((violation) => {
-          const nodes = (violation.nodes || []).map((node) => '<li><code>' + escapeHtml((node.target || []).join(' ')) + '</code></li>').join('')
-          return '<article><h4>' + escapeHtml(violation.id) + ' (' + escapeHtml(violation.impact) + ')</h4>' +
-            '<p>' + escapeHtml(violation.help) + '</p>' +
-            '<p>' + escapeHtml(violation.description) + '</p>' +
-            '<p><a target="_blank" rel="noreferrer" href="' + escapeHtml(violation.helpUrl) + '">WCAG documentation</a></p>' +
-            '<ul>' + (nodes || '<li>No nodes captured</li>') + '</ul></article>'
-        }).join('')
-
-        const passes = (page.passes || []).map((pass) => {
-          const nodes = (pass.nodes || []).map((node) => '<li><code>' + escapeHtml((node.target || []).join(' ')) + '</code></li>').join('')
-          return '<article><h4>' + escapeHtml(pass.id) + '</h4>' +
-            '<p>' + escapeHtml(pass.help) + '</p>' +
-            '<ul>' + (nodes || '<li>No nodes captured</li>') + '</ul></article>'
-        }).join('')
-
-        const incomplete = (page.incomplete || []).map((item) => {
-          const nodes = (item.nodes || []).map((node) => '<li><code>' + escapeHtml((node.target || []).join(' ')) + '</code></li>').join('')
-          return '<article><h4>' + escapeHtml(item.id) + ' (' + escapeHtml(item.impact) + ')</h4>' +
-            '<p>' + escapeHtml(item.help) + '</p>' +
-            '<ul>' + (nodes || '<li>No nodes captured</li>') + '</ul></article>'
-        }).join('')
-
-        const inapplicable = (page.inapplicable || []).map((item) => {
-          return '<article><h4>' + escapeHtml(item.id) + '</h4>' +
-            '<p>' + escapeHtml(item.help) + '</p></article>'
-        }).join('')
-
-        const rulesRun = (page.rulesRun || []).map((rule) => '<code>' + escapeHtml(rule) + '</code>').join(' ')
-
-        box.innerHTML =
-          '<h3>' + escapeHtml(page.url) + '</h3>' +
-          '<p class="muted">Template: ' + escapeHtml(page.template) + ' | Status: ' + escapeHtml(page.status) + ' | Scan: ' + escapeHtml(page.durationMs) + ' ms</p>' +
-          '<h4>Rules Run (' + (page.rulesRun || []).length + ')</h4><p class="muted">' + (rulesRun || 'None') + '</p>' +
-          '<h4>Violations (' + (page.violations || []).length + ')</h4>' + (issues || '<p class="muted">No violations.</p>') +
-          '<h4>Passes (' + (page.passes || []).length + ')</h4>' + (passes || '<p class="muted">No passes.</p>') +
-          '<h4>Incomplete (' + (page.incomplete || []).length + ')</h4>' + (incomplete || '<p class="muted">No incomplete.</p>') +
-          '<h4>Inapplicable (' + (page.inapplicable || []).length + ')</h4>' + (inapplicable || '<p class="muted">No inapplicable.</p>')
-      } catch {
-        box.textContent = 'Could not load page details.'
-      }
-    }
-
-    async function loadRuleData(filePath) {
-      if (!filePath) return null
-      const response = await fetch('./' + filePath + '?ts=' + Date.now(), { cache: 'no-store' })
-      if (!response.ok) throw new Error('Rule index missing')
-      return response.json()
-    }
-
-    async function populateRulePages() {
-      const pageSelect = document.getElementById('rulePageSelect')
-      const searchInput = document.getElementById('rulePageSearch')
-
-      if (!selectedRuleFile) {
-        pageSelect.innerHTML = '<option value="">Select a page</option>'
-        return
-      }
-
-      if (!cachedRuleData || cachedRuleData.__file !== selectedRuleFile) {
-        const data = await loadRuleData(selectedRuleFile)
-        cachedRuleData = { ...data, __file: selectedRuleFile }
-      }
-
-      const query = (searchInput.value || '').toLowerCase()
-      const pages = (cachedRuleData.pages || [])
-        .filter((entry) => !query || entry.url.toLowerCase().includes(query))
-        .slice(-1000)
-        .reverse()
-
-      pageSelect.innerHTML = '<option value="">Select a page</option>' + pages
-        .map((entry) => '<option value="' + escapeHtml(entry.detailPath) + '">' + escapeHtml(entry.url) + ' [' + escapeHtml(entry.impact) + '] (' + entry.nodeCount + ')</option>')
-        .join('')
-    }
-
-    async function showRuleDetailsForPage() {
-      const detailPath = document.getElementById('rulePageSelect').value
-      const detailBox = document.getElementById('ruleDetails')
-      if (!detailPath || !selectedRuleId) {
-        detailBox.textContent = 'Pick a rule and page first.'
-        return
-      }
-
-      detailBox.textContent = 'Loading rule details...'
-
-      try {
-        const response = await fetch('./' + detailPath + '?ts=' + Date.now(), { cache: 'no-store' })
-        if (!response.ok) throw new Error('Page detail missing')
-        const page = await response.json()
-
-        const matches = (page.violations || []).filter((item) => item.id === selectedRuleId)
-        const blocks = matches.map((violation) => {
-          const nodes = (violation.nodes || []).map((node) => {
-            const selector = escapeHtml((node.target || []).join(' '))
-            const failure = escapeHtml(node.failureSummary || '')
-            return '<li><div><code>' + selector + '</code></div><div class="muted">' + failure + '</div></li>'
-          }).join('')
-
-          return '<article><h4>' + escapeHtml(violation.id) + ' (' + escapeHtml(violation.impact) + ')</h4>' +
-            '<p>' + escapeHtml(violation.help) + '</p>' +
-            '<p><a target="_blank" rel="noreferrer" href="' + escapeHtml(violation.helpUrl) + '">WCAG documentation</a></p>' +
-            '<ul>' + (nodes || '<li>No nodes captured</li>') + '</ul></article>'
-        }).join('')
-
-        detailBox.innerHTML = '<h3>' + escapeHtml(page.url) + '</h3>' + (blocks || '<p class="muted">This rule was not found on the selected page detail.</p>')
-      } catch {
-        detailBox.textContent = 'Could not load rule details for selected page.'
-      }
-    }
-
-    async function renderRuleExplorer(data) {
-      const ruleSelect = document.getElementById('ruleSelect')
-      const selected = ruleSelect.value
-      const rules = data.ruleCatalog || []
-
-      ruleSelect.innerHTML = '<option value="">Select a rule</option>' + rules
-        .map((rule) => '<option value="' + escapeHtml(rule.file) + '" data-rule="' + escapeHtml(rule.id) + '">' + escapeHtml(rule.id) + ' (' + rule.count + ')</option>')
-        .join('')
-
-      if (selected && rules.some((rule) => rule.file === selected)) {
-        ruleSelect.value = selected
-      }
-    }
-
-    async function refresh() {
-      try {
-        const response = await fetch('./raw/live-state.json?ts=' + Date.now(), { cache: 'no-store' })
-        if (!response.ok) throw new Error('No live data')
-        const data = await response.json()
-
-        document.getElementById('scanStatus').textContent = data.statusMessage || 'Running'
-        document.getElementById('wcagLevel').textContent = data.wcagLevel || 'AAA'
-        document.getElementById('discoveredPages').textContent = data.discoveredPages || 0
-        document.getElementById('scannedPages').textContent = data.scannedPages || 0
-        document.getElementById('totalViolations').textContent = data.totalViolations || 0
-        document.getElementById('totalPasses').textContent = data.totalPasses || 0
-        document.getElementById('totalIncomplete').textContent = data.totalIncomplete || 0
-        document.getElementById('totalInapplicable').textContent = data.totalInapplicable || 0
-        document.getElementById('rulesRunCount').textContent = (data.rulesRun || []).length || 0
-
-        const resultTypes = {
-          Violations: data.totalViolations || 0,
-          Passes: data.totalPasses || 0,
-          Incomplete: data.totalIncomplete || 0,
-          Inapplicable: data.totalInapplicable || 0
-        }
-        renderBars(document.getElementById('resultTypeBars'), resultTypes)
-        renderBars(document.getElementById('severityBars'), data.severity || {})
-        renderBars(document.getElementById('templateBars'), data.templateTotals || {})
-
-        const rulesRunEl = document.getElementById('rulesList')
-        const rulesRun = data.rulesRun || []
-        if (rulesRun.length === 0) {
-          rulesRunEl.innerHTML = '<span class="muted">No rules yet</span>'
-        } else {
-          rulesRunEl.innerHTML = '<div class="rules-list">' + rulesRun.map((rule) => '<code>' + escapeHtml(rule) + '</code>').join(' ') + '</div>'
-        }
-
-        await renderRuleExplorer(data)
-
-        const pageSearch = document.getElementById('pageSearch')
-        const templateFilter = document.getElementById('templateFilter')
-
-        const selectedTemplate = templateFilter.value
-        const templates = Array.from(new Set((data.pageIndex || []).map((page) => page.template))).sort()
-        templateFilter.innerHTML = '<option value="">All templates</option>' + templates.map((template) => '<option value="' + template + '">' + template + '</option>').join('')
-        templateFilter.value = selectedTemplate
-
-        const filteredPages = (data.pageIndex || [])
-          .filter((page) => (!templateFilter.value || page.template === templateFilter.value) && (!pageSearch.value || page.url.toLowerCase().includes(pageSearch.value.toLowerCase())))
-          .slice(-500)
-          .reverse()
-
-        setRows(
-          document.getElementById('ruleRows'),
-          (data.topRules || []).map((rule) => '<tr><td>' + escapeHtml(rule.id) + '</td><td>' + rule.count + '</td></tr>').join(''),
-          'No rules yet'
-        )
-
-        setRows(
-          document.getElementById('pageRows'),
-          filteredPages.map((page) => '<tr><td>' + escapeHtml(page.url) + '</td><td>' + escapeHtml(page.template) + '</td><td>' + (page.violations || 0) + '</td><td>' + (page.passes || 0) + '</td><td>' + (page.incomplete || 0) + '</td><td>' + (page.inapplicable || 0) + '</td><td><button class="ghost" data-detail="' + escapeHtml(page.detailPath) + '">View</button></td></tr>').join(''),
-          'No pages scanned yet',
-          7
-        )
-
-        for (const button of document.querySelectorAll('[data-detail]')) {
-          button.addEventListener('click', () => showPageDetails(button.getAttribute('data-detail')))
-        }
-
-        setRows(
-          document.getElementById('logRows'),
-          (data.logs || []).map((log) => '<tr><td>' + escapeHtml(log.at) + '</td><td>' + escapeHtml(log.level) + '</td><td>' + escapeHtml(log.message) + '</td></tr>').join(''),
-          'No logs yet',
-          3
-        )
-
-        const checklist = (data.manualChecklist || []).map((item) => '<li>' + escapeHtml(item) + '</li>').join('')
-        document.getElementById('checklistRows').innerHTML = checklist || '<li class="muted">No manual checklist available.</li>'
-
-        if (data.status === 'completed' && pollTimer) {
-          clearInterval(pollTimer)
-          pollTimer = null
-          const dot = document.querySelector('.dot')
-          if (dot) { dot.style.animation = 'none'; dot.style.background = '#22c55e'; }
-        }
-      } catch {
-        document.getElementById('scanStatus').textContent = 'Waiting for first scan update...'
-      }
-    }
-
-    let pollTimer = null
-
+    // --- start scan button ---
     document.getElementById('startScanBtn').addEventListener('click', async () => {
       const urlInput = document.getElementById('scanUrl')
       const msg = document.getElementById('scanFormMsg')
       const url = urlInput.value.trim()
-
       msg.className = ''
-      if (!url) {
-        msg.className = 'error'
-        msg.textContent = 'Please enter a URL.'
-        urlInput.focus()
-        return
-      }
-
+      if (!url) { msg.className = 'error'; msg.textContent = 'Please enter a URL.'; urlInput.focus(); return }
       const btn = document.getElementById('startScanBtn')
       btn.disabled = true
       msg.textContent = 'Starting scan...'
+      const parsePatterns = (v) => (v || '').split(',').map(s => s.trim()).filter(Boolean)
 
       try {
         const res = await fetch('/api/scan', {
@@ -842,13 +650,18 @@ const DASHBOARD_HTML = `<!doctype html>
             url,
             wcagLevel: document.getElementById('scanWcag').value,
             maxPages: Number(document.getElementById('scanMaxPages').value) || 2000,
-            sampleTemplates: Number(document.getElementById('scanSampleTemplate').value) || 0
+            sampleTemplates: Number(document.getElementById('scanSampleTemplate').value) || 0,
+            depth: Number(document.getElementById('scanDepth').value) || 6,
+            concurrency: Number(document.getElementById('scanConcurrency').value) || 10,
+            include: parsePatterns(document.getElementById('scanInclude').value),
+            exclude: parsePatterns(document.getElementById('scanExclude').value)
           })
         })
         const data = await res.json()
         if (res.ok) {
           msg.textContent = 'Scan started — dashboard will update automatically.'
           document.getElementById('scanFormWrap').open = false
+          document.getElementById('viewReportBtn').style.display = 'none'
           if (!pollTimer) pollTimer = setInterval(refresh, 1500)
           refresh()
         } else {
@@ -863,21 +676,322 @@ const DASHBOARD_HTML = `<!doctype html>
       }
     })
 
+    // --- utilities ---
+    function renderBars(el, values) {
+      const entries = Object.entries(values || {})
+      if (entries.length === 0) { el.innerHTML = '<span class="muted">No data yet</span>'; return }
+      const max = Math.max(...entries.map(([, v]) => v), 1)
+      el.innerHTML = entries.map(([label, value]) => {
+        const width = Math.round((value / max) * 100)
+        return '<div class="bar-row"><span>' + label + '</span><div class="bar" role="meter" aria-valuenow="' + value + '" aria-valuemin="0" aria-valuemax="' + max + '" aria-label="' + label + '"><span style="width:' + width + '%"></span></div><strong>' + value + '</strong></div>'
+      }).join('')
+    }
+
+    function setRows(el, rowsHtml, emptyText, colspan) {
+      el.innerHTML = rowsHtml || '<tr><td class="muted" colspan="' + (colspan || 3) + '">' + emptyText + '</td></tr>'
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    }
+
+    // --- page details panel ---
+    async function showPageDetails(detailPath) {
+      const box = document.getElementById('pageDetails')
+      box.textContent = 'Loading...'
+      try {
+        const r = await fetch('./' + detailPath + '?ts=' + Date.now(), { cache: 'no-store' })
+        const page = await r.json()
+        const renderItems = (items) => (items || []).map(item => {
+          const nodes = (item.nodes || []).map(n => '<li><code>' + escapeHtml((n.target || []).join(' ')) + '</code></li>').join('')
+          return '<article><h4>' + escapeHtml(item.id) + (item.impact ? ' (' + escapeHtml(item.impact) + ')' : '') + '</h4>' +
+            '<p>' + escapeHtml(item.help) + '</p>' +
+            (item.helpUrl ? '<p><a target="_blank" rel="noreferrer" href="' + escapeHtml(item.helpUrl) + '">WCAG docs</a></p>' : '') +
+            '<ul>' + (nodes || '<li>No nodes</li>') + '</ul></article>'
+        }).join('')
+        const rulesRun = (page.rulesRun || []).map(r => '<code>' + escapeHtml(r) + '</code>').join(' ')
+        box.innerHTML =
+          '<h3>' + escapeHtml(page.url) + '</h3>' +
+          '<p class="muted">Template: ' + escapeHtml(page.template) + ' | Status: ' + escapeHtml(page.status) + ' | ' + escapeHtml(page.durationMs) + ' ms</p>' +
+          '<h4>Rules Run (' + (page.rulesRun || []).length + ')</h4><p class="muted">' + (rulesRun || 'None') + '</p>' +
+          '<h4>Violations (' + (page.violations || []).length + ')</h4>' + (renderItems(page.violations) || '<p class="muted">None</p>') +
+          '<h4>Passes (' + (page.passes || []).length + ')</h4>' + (renderItems(page.passes) || '<p class="muted">None</p>') +
+          '<h4>Incomplete (' + (page.incomplete || []).length + ')</h4>' + (renderItems(page.incomplete) || '<p class="muted">None</p>') +
+          '<h4>Inapplicable (' + (page.inapplicable || []).length + ')</h4>' +
+          ((page.inapplicable || []).map(i => '<article><h4>' + escapeHtml(i.id) + '</h4><p>' + escapeHtml(i.help) + '</p></article>').join('') || '<p class="muted">None</p>')
+      } catch { box.textContent = 'Could not load page details.' }
+    }
+
+    // --- generic rule explorer ---
+    function allRulesTable(catalog) {
+      if (!catalog || catalog.length === 0) return '<p class="muted">No data yet.</p>'
+      return '<table><thead><tr><th>Rule</th><th>Description</th><th style="text-align:right">Count</th><th style="text-align:right">Pages</th></tr></thead><tbody>' +
+        catalog.map(rule =>
+          '<tr><td><code>' + escapeHtml(rule.id) + '</code></td><td>' + escapeHtml(rule.help) + '</td>' +
+          '<td style="text-align:right">' + rule.count + '</td><td style="text-align:right">' + rule.pages + '</td></tr>'
+        ).join('') + '</tbody></table>'
+    }
+
+    function updateRuleSelect(selectEl, catalog, state) {
+      const prev = selectEl.value
+      const opts = catalog.map(rule =>
+        '<option value="' + escapeHtml(rule.file) + '" data-rule="' + escapeHtml(rule.id) + '">' +
+        escapeHtml(rule.id) + ' (' + rule.count + ')</option>'
+      ).join('')
+      selectEl.innerHTML = '<option value="__all__">All rules</option><option value="">— Select a specific rule —</option>' + opts
+      if (prev === '__all__' || (prev && catalog.some(r => r.file === prev))) selectEl.value = prev
+      else selectEl.value = '__all__'
+    }
+
+    async function populateExplorerPages(ns) {
+      const pageSelect = document.getElementById(ns + 'RulePageSelect')
+      const searchInput = document.getElementById(ns + 'RulePageSearch')
+      const state = explorerState[ns]
+      if (!state.ruleFile || state.ruleFile === '__all__') {
+        pageSelect.innerHTML = '<option value="">N/A — all rules shown</option>'
+        return
+      }
+      if (!state.cache || state.cache.__file !== state.ruleFile) {
+        const r = await fetch('./' + state.ruleFile + '?ts=' + Date.now(), { cache: 'no-store' })
+        if (!r.ok) return
+        const data = await r.json()
+        state.cache = { ...data, __file: state.ruleFile }
+      }
+      const query = (searchInput ? searchInput.value : '').toLowerCase()
+      const pages = (state.cache.pages || [])
+        .filter(e => !query || e.url.toLowerCase().includes(query))
+        .slice(-1000).reverse()
+      pageSelect.innerHTML = '<option value="">Select a page</option>' + pages.map(e =>
+        '<option value="' + escapeHtml(e.detailPath) + '">' + escapeHtml(e.url) +
+        (e.impact ? ' [' + escapeHtml(e.impact) + ']' : '') + ' (' + e.nodeCount + ')</option>'
+      ).join('')
+    }
+
+    async function showExplorerDetails(ns, resultKey) {
+      const detailPath = document.getElementById(ns + 'RulePageSelect').value
+      const box = document.getElementById(ns + 'RuleDetails')
+      const state = explorerState[ns]
+      if (!detailPath || !state.ruleId) { box.textContent = 'Pick a rule and page first.'; return }
+      box.textContent = 'Loading...'
+      try {
+        const r = await fetch('./' + detailPath + '?ts=' + Date.now(), { cache: 'no-store' })
+        if (!r.ok) throw new Error()
+        const page = await r.json()
+        const matches = (page[resultKey] || []).filter(i => i.id === state.ruleId)
+        const blocks = matches.map(item => {
+          const nodes = (item.nodes || []).map(n =>
+            '<li><div><code>' + escapeHtml((n.target || []).join(' ')) + '</code></div>' +
+            (n.failureSummary ? '<div class="muted">' + escapeHtml(n.failureSummary) + '</div>' : '') + '</li>'
+          ).join('')
+          return '<article><h4>' + escapeHtml(item.id) + (item.impact ? ' (' + escapeHtml(item.impact) + ')' : '') + '</h4>' +
+            '<p>' + escapeHtml(item.help) + '</p>' +
+            (item.helpUrl ? '<p><a target="_blank" rel="noreferrer" href="' + escapeHtml(item.helpUrl) + '">WCAG docs</a></p>' : '') +
+            '<ul>' + (nodes || '<li>No nodes</li>') + '</ul></article>'
+        }).join('')
+        box.innerHTML = '<h3>' + escapeHtml(page.url) + '</h3>' + (blocks || '<p class="muted">Rule not found on this page.</p>')
+      } catch { box.textContent = 'Could not load details.' }
+    }
+
+    function wireExplorer(cfg) {
+      const { selectId, searchId, pageSelectId, viewBtnId, detailBoxId, stateKey, resultKey, catalog } = cfg
+      const ruleSelect = document.getElementById(selectId)
+      const detailBox = document.getElementById(detailBoxId)
+      if (!ruleSelect || !detailBox) return
+      const state = explorerState[stateKey]
+
+      // Only re-render select options when catalog size changes to avoid disrupting user interaction
+      const catalogKey = catalog.length + ':' + (catalog[0]?.id || '')
+      if (state._catalogKey === catalogKey) return
+      state._catalogKey = catalogKey
+
+      updateRuleSelect(ruleSelect, catalog, state)
+
+      ruleSelect.onchange = async (e) => {
+        state.ruleFile = e.target.value
+        state.ruleId = e.target.options[e.target.selectedIndex]?.dataset?.rule || ''
+        state.cache = null
+        if (state.ruleFile === '__all__') {
+          const pageSelect = document.getElementById(pageSelectId)
+          if (pageSelect) pageSelect.innerHTML = '<option value="">N/A — all rules shown</option>'
+          detailBox.innerHTML = allRulesTable(catalog)
+        } else {
+          detailBox.innerHTML = '<span class="muted">Pick a page then load details.</span>'
+          // temporarily bind state for populateExplorerPages
+          state.__selectId = selectId; state.__searchId = searchId; state.__pageSelectId = pageSelectId
+          await populateExplorerPagesById(state, searchId, pageSelectId)
+        }
+      }
+
+      const searchEl = document.getElementById(searchId)
+      if (searchEl) searchEl.oninput = () => populateExplorerPagesById(state, searchId, pageSelectId)
+
+      const viewBtn = document.getElementById(viewBtnId)
+      if (viewBtn) viewBtn.onclick = () => showExplorerDetailsById(state, pageSelectId, detailBoxId, resultKey)
+
+      // Show all rules table by default
+      if (!state.ruleFile || state.ruleFile === '__all__') {
+        detailBox.innerHTML = allRulesTable(catalog)
+      }
+    }
+
+    async function populateExplorerPagesById(state, searchId, pageSelectId) {
+      const pageSelect = document.getElementById(pageSelectId)
+      const searchInput = document.getElementById(searchId)
+      if (!state.ruleFile || state.ruleFile === '__all__') {
+        if (pageSelect) pageSelect.innerHTML = '<option value="">N/A — all rules shown</option>'
+        return
+      }
+      if (!state.cache || state.cache.__file !== state.ruleFile) {
+        const r = await fetch('./' + state.ruleFile + '?ts=' + Date.now(), { cache: 'no-store' })
+        if (!r.ok) return
+        const data = await r.json()
+        state.cache = { ...data, __file: state.ruleFile }
+      }
+      const query = (searchInput ? searchInput.value : '').toLowerCase()
+      const pages = (state.cache.pages || [])
+        .filter(e => !query || e.url.toLowerCase().includes(query))
+        .slice(-1000).reverse()
+      if (pageSelect) pageSelect.innerHTML = '<option value="">Select a page</option>' + pages.map(e =>
+        '<option value="' + escapeHtml(e.detailPath) + '">' + escapeHtml(e.url) +
+        (e.impact ? ' [' + escapeHtml(e.impact) + ']' : '') + ' (' + e.nodeCount + ')</option>'
+      ).join('')
+    }
+
+    async function showExplorerDetailsById(state, pageSelectId, detailBoxId, resultKey) {
+      const pageSelect = document.getElementById(pageSelectId)
+      const box = document.getElementById(detailBoxId)
+      if (!pageSelect || !box) return
+      const detailPath = pageSelect.value
+      if (!detailPath || !state.ruleId) { box.textContent = 'Pick a rule and page first.'; return }
+      box.textContent = 'Loading...'
+      try {
+        const r = await fetch('./' + detailPath + '?ts=' + Date.now(), { cache: 'no-store' })
+        if (!r.ok) throw new Error()
+        const page = await r.json()
+        const matches = (page[resultKey] || []).filter(i => i.id === state.ruleId)
+        const blocks = matches.map(item => {
+          const nodes = (item.nodes || []).map(n =>
+            '<li><div><code>' + escapeHtml((n.target || []).join(' ')) + '</code></div>' +
+            (n.failureSummary ? '<div class="muted">' + escapeHtml(n.failureSummary) + '</div>' : '') + '</li>'
+          ).join('')
+          return '<article><h4>' + escapeHtml(item.id) + (item.impact ? ' (' + escapeHtml(item.impact) + ')' : '') + '</h4>' +
+            '<p>' + escapeHtml(item.help) + '</p>' +
+            (item.helpUrl ? '<p><a target="_blank" rel="noreferrer" href="' + escapeHtml(item.helpUrl) + '">WCAG docs</a></p>' : '') +
+            '<ul>' + (nodes || '<li>No nodes</li>') + '</ul></article>'
+        }).join('')
+        box.innerHTML = '<h3>' + escapeHtml(page.url) + '</h3>' + (blocks || '<p class="muted">Rule not found on this page.</p>')
+      } catch { box.textContent = 'Could not load details.' }
+    }
+
+    // --- main refresh ---
+    async function refresh() {
+      try {
+        const [statusRes, liveRes] = await Promise.all([
+          fetch('/api/status?ts=' + Date.now(), { cache: 'no-store' }).catch(() => null),
+          fetch('./raw/live-state.json?ts=' + Date.now(), { cache: 'no-store' })
+        ])
+
+        if (statusRes && statusRes.ok) {
+          const s = await statusRes.json()
+          const btn = document.getElementById('startScanBtn')
+          if (s.scanRunning) {
+            btn.disabled = true
+            btn.textContent = 'Scanning...'
+          } else {
+            btn.disabled = false
+            btn.textContent = 'Start Scan'
+          }
+        }
+
+        if (!liveRes.ok) throw new Error('No live data')
+        const data = await liveRes.json()
+
+        document.getElementById('scanStatus').textContent = data.statusMessage || 'Running'
+        document.getElementById('wcagLevel').textContent = data.wcagLevel || 'AAA'
+        document.getElementById('discoveredPages').textContent = data.discoveredPages || 0
+        document.getElementById('scannedPages').textContent = data.scannedPages || 0
+        document.getElementById('totalViolations').textContent = data.totalViolations || 0
+        document.getElementById('totalPasses').textContent = data.totalPasses || 0
+        document.getElementById('totalIncomplete').textContent = data.totalIncomplete || 0
+        document.getElementById('totalInapplicable').textContent = data.totalInapplicable || 0
+        document.getElementById('rulesRunCount').textContent = (data.rulesRun || []).length
+
+        renderBars(document.getElementById('resultTypeBars'), {
+          Violations: data.totalViolations || 0,
+          Passes: data.totalPasses || 0,
+          Incomplete: data.totalIncomplete || 0,
+          Inapplicable: data.totalInapplicable || 0
+        })
+        renderBars(document.getElementById('severityBars'), data.severity || {})
+        renderBars(document.getElementById('templateBars'), data.templateTotals || {})
+
+        const rulesRun = data.rulesRun || []
+        document.getElementById('rulesList').innerHTML = rulesRun.length
+          ? '<div class="rules-list">' + rulesRun.map(r => '<code>' + escapeHtml(r) + '</code>').join(' ') + '</div>'
+          : '<span class="muted">No rules yet</span>'
+
+        setRows(document.getElementById('ruleRows'),
+          (data.topRules || []).map(rule => '<tr><td>' + escapeHtml(rule.id) + '</td><td>' + rule.count + '</td></tr>').join(''),
+          'No rules yet')
+
+        // wire all four explorer tabs
+        wireExplorer({ selectId:'ruleSelect', searchId:'rulePageSearch', pageSelectId:'rulePageSelect', viewBtnId:'rulePageView', detailBoxId:'ruleDetails', stateKey:'rule', resultKey:'violations', catalog: data.ruleCatalog || [] })
+        wireExplorer({ selectId:'passRuleSelect', searchId:'passRulePageSearch', pageSelectId:'passRulePageSelect', viewBtnId:'passRulePageView', detailBoxId:'passRuleDetails', stateKey:'pass', resultKey:'passes', catalog: data.passesRuleCatalog || [] })
+        wireExplorer({ selectId:'incompleteRuleSelect', searchId:'incompleteRulePageSearch', pageSelectId:'incompleteRulePageSelect', viewBtnId:'incompleteRulePageView', detailBoxId:'incompleteRuleDetails', stateKey:'incomplete', resultKey:'incomplete', catalog: data.incompleteRuleCatalog || [] })
+        wireExplorer({ selectId:'inapplicableRuleSelect', searchId:'inapplicableRulePageSearch', pageSelectId:'inapplicableRulePageSelect', viewBtnId:'inapplicableRulePageView', detailBoxId:'inapplicableRuleDetails', stateKey:'inapplicable', resultKey:'inapplicable', catalog: data.inapplicableRuleCatalog || [] })
+
+        const pageSearch = document.getElementById('pageSearch')
+        const templateFilter = document.getElementById('templateFilter')
+        const selectedTemplate = templateFilter.value
+        const templates = [...new Set((data.pageIndex || []).map(p => p.template))].sort()
+        templateFilter.innerHTML = '<option value="">All templates</option>' +
+          templates.map(t => '<option value="' + t + '">' + t + '</option>').join('')
+        templateFilter.value = selectedTemplate
+
+        const filteredPages = (data.pageIndex || [])
+          .filter(p => (!templateFilter.value || p.template === templateFilter.value) &&
+            (!pageSearch.value || p.url.toLowerCase().includes(pageSearch.value.toLowerCase())))
+          .slice(-500).reverse()
+
+        setRows(document.getElementById('pageRows'),
+          filteredPages.map(page =>
+            '<tr><td>' + escapeHtml(page.url) + '</td><td>' + escapeHtml(page.template) +
+            '</td><td>' + (page.violations || 0) + '</td><td>' + (page.passes || 0) +
+            '</td><td>' + (page.incomplete || 0) + '</td><td>' + (page.inapplicable || 0) +
+            '</td><td><button class="ghost" data-detail="' + escapeHtml(page.detailPath) + '">View</button></td></tr>'
+          ).join(''), 'No pages scanned yet', 7)
+
+        for (const btn of document.querySelectorAll('[data-detail]')) {
+          btn.addEventListener('click', () => showPageDetails(btn.getAttribute('data-detail')))
+        }
+
+        setRows(document.getElementById('logRows'),
+          (data.logs || []).map(log =>
+            '<tr><td>' + escapeHtml(log.at) + '</td><td>' + escapeHtml(log.level) + '</td><td>' + escapeHtml(log.message) + '</td></tr>'
+          ).join(''), 'No logs yet', 3)
+
+        document.getElementById('checklistRows').innerHTML =
+          (data.manualChecklist || []).map(i => '<li>' + escapeHtml(i) + '</li>').join('') ||
+          '<li class="muted">No manual checklist available.</li>'
+
+        if (data.status === 'completed') {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+          const dot = document.querySelector('.dot')
+          if (dot) { dot.style.animation = 'none'; dot.style.background = '#22c55e' }
+          document.getElementById('viewReportBtn').style.display = 'inline-block'
+        }
+      } catch {
+        document.getElementById('scanStatus').textContent = 'Waiting for first scan update...'
+      }
+    }
+
+    let pollTimer = null
+
     refresh()
     document.getElementById('pageSearch').addEventListener('input', refresh)
     document.getElementById('templateFilter').addEventListener('change', refresh)
-    document.getElementById('ruleSelect').addEventListener('change', async (event) => {
-      selectedRuleFile = event.target.value
-      selectedRuleId = event.target.options[event.target.selectedIndex]?.dataset?.rule || ''
-      cachedRuleData = null
-      await populateRulePages()
-    })
-    document.getElementById('rulePageSearch').addEventListener('input', async () => {
-      await populateRulePages()
-    })
-    document.getElementById('rulePageView').addEventListener('click', async () => {
-      await showRuleDetailsForPage()
-    })
     pollTimer = setInterval(refresh, 1500)
   </script>
 </body>

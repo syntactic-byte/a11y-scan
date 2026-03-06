@@ -27,3 +27,6 @@ Thumbs.db
 # Runtime artifacts
 playwright-report/
 test-results/
+
+# Claude Code worktrees (nested git repos — never commit these)
+.claude/
