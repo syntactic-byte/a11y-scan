@@ -88,7 +88,7 @@ async function scanSinglePage(page, url, options) {
   }
 }
 
-export async function scanPages(urls, options, logger) {
+export async function scanPages(urls, options, logger, signal) {
   logger.info(`Scanning ${urls.length} pages with concurrency ${options.concurrency}`)
 
   const pool = new BrowserPool({
@@ -100,6 +100,7 @@ export async function scanPages(urls, options, logger) {
     await pool.init()
 
     const results = await pool.run(urls, async ({ context, url, index }) => {
+      if (signal?.aborted) return null
       logger.progress("Scanning page", index + 1, urls.length)
       const page = await context.newPage()
       try {
@@ -126,9 +127,9 @@ export async function scanPages(urls, options, logger) {
         if (options.onPageResult) await options.onPageResult(failed)
         return failed
       }
-    })
+    }, signal)
 
-    return results
+    return results.filter(Boolean)
   } finally {
     await pool.close().catch(() => {})
   }

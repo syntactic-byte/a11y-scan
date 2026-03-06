@@ -44,15 +44,18 @@ function sendJson(res, status, payload) {
 }
 
 export async function serveDashboard({ reportDir, port, defaultOptions = {}, initialUrl = null }) {
-  const root = path.resolve(reportDir)
+  let root = path.resolve(reportDir)
   let scanRunning = false
+  let scanAbort = null // AbortController for current scan
+  let lastScanUrl = null
+  let lastScanOverrides = null
 
   // Always write fresh dashboard HTML so stale generated files never cause JS errors
   await writeDashboard(root)
 
-  async function startScan(url, overrides = {}) {
+  function buildScanOptions(overrides = {}) {
     const wcagLevel = WCAG_LEVELS.has(overrides.wcagLevel) ? overrides.wcagLevel : (defaultOptions.wcagLevel || "AAA")
-    const scanOptions = {
+    return {
       format: defaultOptions.format || "html,json,csv",
       locale: defaultOptions.locale || "en",
       wcagLevel,
@@ -73,14 +76,29 @@ export async function serveDashboard({ reportDir, port, defaultOptions = {}, ini
       failOnSerious: false,
       reportDir: root
     }
+  }
+
+  async function startScan(url, overrides = {}) {
+    const scanOptions = buildScanOptions(overrides)
+    scanAbort = new AbortController()
+    lastScanUrl = url
+    lastScanOverrides = overrides
 
     scanRunning = true
-    runScan(url, scanOptions)
+    runScan(url, scanOptions, scanAbort.signal)
       .catch((err) => {
         console.log(`\nScan failed: ${err.message}`)
         if (err.stack) console.log(err.stack)
       })
-      .finally(() => { scanRunning = false })
+      .finally(() => {
+        scanRunning = false
+        scanAbort = null
+      })
+  }
+
+  function hasResumeState() {
+    const resumePath = path.join(root, "raw", "resume-state.json")
+    return fs.stat(resumePath).then(() => true).catch(() => false)
   }
 
   const server = http.createServer(async (req, res) => {
@@ -101,7 +119,6 @@ export async function serveDashboard({ reportDir, port, defaultOptions = {}, ini
           return
         }
 
-        // Validate the URL is parseable
         try { new URL(url) } catch {
           sendJson(res, 400, { error: "Invalid URL" })
           return
@@ -115,9 +132,75 @@ export async function serveDashboard({ reportDir, port, defaultOptions = {}, ini
       return
     }
 
-    // GET /api/status — check if scan is running
+    // POST /api/scan/stop — stop the running scan
+    if (req.method === "POST" && req.url === "/api/scan/stop") {
+      if (!scanRunning || !scanAbort) {
+        sendJson(res, 400, { error: "No scan is running" })
+        return
+      }
+      scanAbort.abort()
+      sendJson(res, 200, { status: "stopping" })
+      return
+    }
+
+    // POST /api/scan/resume — resume a stopped scan
+    if (req.method === "POST" && req.url === "/api/scan/resume") {
+      if (scanRunning) {
+        sendJson(res, 409, { error: "A scan is already running" })
+        return
+      }
+
+      const canResume = await hasResumeState()
+      if (!canResume) {
+        sendJson(res, 400, { error: "No stopped scan to resume" })
+        return
+      }
+
+      try {
+        const resumeRaw = await fs.readFile(path.join(root, "raw", "resume-state.json"), "utf8")
+        const resumeData = JSON.parse(resumeRaw)
+        await startScan(resumeData.targetUrl, resumeData.options)
+        sendJson(res, 202, { status: "resumed", url: resumeData.targetUrl })
+      } catch (err) {
+        sendJson(res, 400, { error: err.message })
+      }
+      return
+    }
+
+    // GET /api/status — check scan state
     if (req.method === "GET" && req.url?.startsWith("/api/status")) {
-      sendJson(res, 200, { scanRunning })
+      const canResume = !scanRunning && await hasResumeState()
+      sendJson(res, 200, { scanRunning, canResume })
+      return
+    }
+
+    // POST /api/report-dir — change the report output directory
+    if (req.method === "POST" && req.url === "/api/report-dir") {
+      if (scanRunning) {
+        sendJson(res, 409, { error: "Cannot change directory while scan is running" })
+        return
+      }
+      try {
+        const raw = await readBody(req)
+        const { dir } = JSON.parse(raw || "{}")
+        if (!dir || typeof dir !== "string") {
+          sendJson(res, 400, { error: "dir is required" })
+          return
+        }
+        const resolved = path.resolve(dir)
+        await fs.mkdir(resolved, { recursive: true })
+        root = resolved
+        await writeDashboard(root)
+        sendJson(res, 200, { status: "ok", reportDir: resolved })
+      } catch (err) {
+        sendJson(res, 400, { error: err.message })
+      }
+      return
+    }
+
+    // GET /api/report-dir — get the current report directory
+    if (req.method === "GET" && req.url?.startsWith("/api/report-dir")) {
+      sendJson(res, 200, { reportDir: root })
       return
     }
 

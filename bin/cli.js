@@ -42,7 +42,7 @@ program
   .option("--depth <number>", "crawl depth", (v) => parseNumber(v, 6), 6)
   .option("--report-dir <dir>", "output directory", "./a11y-report")
   .option("--format <formats>", "comma-separated: html,json,csv", "html,json,csv")
-  .option("--sample-templates <number>", "Sample N pages per Shopify template type (products, collections, blogs); 0 = off", (v) => parseNumber(v, 0), 0)
+  .option("--sample-templates <number>", "Sample N pages per unique page structure (groups structurally similar pages); 0 = off", (v) => parseNumber(v, 0), 0)
   .option("--timeout <ms>", "page timeout in milliseconds", (v) => parseNumber(v, 30000), 30000)
   .option("--headless", "run browser in headless mode", true)
   .option("--no-headless", "run browser with UI")

@@ -424,7 +424,7 @@ const DASHBOARD_HTML = `<!doctype html>
           <input id="scanMaxPages" type="number" value="2000" min="1" max="50000" />
         </div>
         <div class="scan-field">
-          <label for="scanSampleTemplate">Sample per Template <span class="scan-hint">(0 = off)</span></label>
+          <label for="scanSampleTemplate">Pages per Structure <span class="scan-hint">(0 = off, groups similar pages)</span></label>
           <input id="scanSampleTemplate" type="number" value="0" min="0" max="100" />
         </div>
         <div class="scan-field">

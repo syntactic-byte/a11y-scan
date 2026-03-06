@@ -1,6 +1,7 @@
 import { chromium } from "playwright"
 import { fetchRobots, isAllowedByRobots } from "./robots.js"
 import { discoverUrlsFromSitemaps } from "./sitemap.js"
+import { sampleByStructure } from "./template-sampler.js"
 import {
   getPathDepth,
   isExcluded,
@@ -8,34 +9,6 @@ import {
   isSameDomain,
   normalizeUrl
 } from "../utils/url-utils.js"
-
-function isLikelyShopify(urls) {
-  return urls.some((url) => {
-    const p = new URL(url).pathname
-    return p.startsWith("/products/") || p.startsWith("/collections/") || p.startsWith("/blogs/")
-  })
-}
-
-function pickByPrefix(urls, prefix, count) {
-  const filtered = urls.filter((url) => new URL(url).pathname.startsWith(prefix))
-  if (count <= 0) return filtered
-  return filtered.slice(0, count)
-}
-
-function applyShopifySampling(urls, sampleTemplate) {
-  if (!isLikelyShopify(urls) || sampleTemplate <= 0) return urls
-
-  const selected = new Set()
-  const homepage = urls.find((url) => new URL(url).pathname === "/")
-  if (homepage) selected.add(homepage)
-
-  for (const url of pickByPrefix(urls, "/products/", sampleTemplate)) selected.add(url)
-  for (const url of pickByPrefix(urls, "/collections/", sampleTemplate)) selected.add(url)
-  for (const url of pickByPrefix(urls, "/pages/", 0)) selected.add(url)
-  for (const url of pickByPrefix(urls, "/blogs/", sampleTemplate)) selected.add(url)
-
-  return [...selected]
-}
 
 function shouldKeep(url, options, robotsRules, baseUrl) {
   if (!isSameDomain(url, baseUrl)) return false
@@ -147,10 +120,7 @@ export async function discoverUrls(baseUrl, options, logger) {
     urls = await crawlByLinks(normalizedBase, options, robotsRules, logger)
   }
 
-  const sampled = applyShopifySampling(urls, options.sampleTemplates)
-  if (sampled.length < urls.length) {
-    logger.info(`Shopify sampling reduced ${urls.length} URLs to ${sampled.length} (sampleTemplates=${options.sampleTemplates})`)
-  }
+  const sampled = await sampleByStructure(urls, options.sampleTemplates, options, logger)
 
   const trimmed = sampled.slice(0, options.maxPages)
   return [...new Set(trimmed)]

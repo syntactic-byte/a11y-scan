@@ -16,12 +16,13 @@ export class BrowserPool {
     }
   }
 
-  async run(urls, worker) {
+  async run(urls, worker, signal) {
     const results = new Array(urls.length)
     let cursor = 0
 
     const workers = this.contexts.map((context, workerId) => (async () => {
       while (cursor < urls.length) {
+        if (signal?.aborted) break
         const index = cursor
         cursor += 1
 
@@ -31,7 +32,7 @@ export class BrowserPool {
     })())
 
     await Promise.all(workers)
-    return results
+    return results.filter((r) => r !== undefined)
   }
 
   async close() {

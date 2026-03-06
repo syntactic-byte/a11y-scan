@@ -2,7 +2,7 @@
   "name": "a11y-scan",
   "version": "1.0.0",
   "description": "Open-source accessibility scanner for large websites — WCAG 2.0/2.1/2.2 A/AA/AAA with Playwright + axe-core",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=18.0.0"
