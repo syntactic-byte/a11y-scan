@@ -2,11 +2,11 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { escapeHtml, safeSlug, templateFolder } from "../utils/url-utils.js"
 
-function computeScore(impacts, scannedPages) {
-  const { critical = 0, serious = 0, moderate = 0, minor = 0, unknown = 0 } = impacts
-  const weighted = critical * 10 + serious * 5 + moderate * 2 + minor * 1 + unknown * 1
-  const penaltyPerPage = weighted / Math.max(scannedPages, 1)
-  return Math.max(0, Math.round(100 - penaltyPerPage))
+function computeScore(severitySummary) {
+  const { totalPasses = 0, totalViolations = 0, totalIncomplete = 0 } = severitySummary
+  const total = totalPasses + totalViolations + totalIncomplete
+  if (total === 0) return 100
+  return Math.round((totalPasses / total) * 100)
 }
 
 function scoreColor(score) {
@@ -56,7 +56,7 @@ function pagePath(page) {
 export async function writeStaticReport(reportDir, payload) {
   const { summary, severitySummary, ruleSummary, templateSummary, pages } = payload
   const impacts = severitySummary.impacts || {}
-  const score = computeScore(impacts, summary.scannedPages)
+  const score = computeScore(severitySummary)
   const color = scoreColor(score)
   const label = scoreLabel(score)
 
@@ -431,6 +431,14 @@ export async function writeStaticReport(reportDir, payload) {
       <article class="stat">
         <div class="stat-label">Minor</div>
         <div class="stat-value" style="color:#60a5fa">${impacts.minor || 0}</div>
+      </article>
+      <article class="stat">
+        <div class="stat-label">Total Passes</div>
+        <div class="stat-value" style="color:#22c55e">${severitySummary.totalPasses || 0}</div>
+      </article>
+      <article class="stat">
+        <div class="stat-label">Incomplete</div>
+        <div class="stat-value" style="color:#facc15">${severitySummary.totalIncomplete || 0}</div>
       </article>
       <article class="stat">
         <div class="stat-label">Pages with Violations</div>

@@ -7,6 +7,8 @@ function newImpactCounter() {
 export function buildSeveritySummary(results) {
   const impacts = newImpactCounter()
   let totalViolations = 0
+  let totalPasses = 0
+  let totalIncomplete = 0
 
   for (const page of results) {
     for (const violation of page.violations) {
@@ -15,9 +17,21 @@ export function buildSeveritySummary(results) {
       impacts[key] += count
       totalViolations += count
     }
+
+    if (page.passes) {
+      for (const pass of page.passes) {
+        totalPasses += Math.max(1, pass.nodes.length)
+      }
+    }
+
+    if (page.incomplete) {
+      for (const item of page.incomplete) {
+        totalIncomplete += Math.max(1, item.nodes.length)
+      }
+    }
   }
 
-  return { totalViolations, impacts }
+  return { totalViolations, totalPasses, totalIncomplete, impacts }
 }
 
 export function buildWcagSummary(results) {
