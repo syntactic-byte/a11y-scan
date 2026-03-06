@@ -292,6 +292,56 @@ const DASHBOARD_HTML = `<!doctype html>
 
     .span-2 { grid-column: span 2; }
 
+    .scan-form-wrap {
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      background: linear-gradient(120deg, rgba(18, 40, 56, 0.85), rgba(11, 27, 40, 0.8));
+      box-shadow: var(--shadow);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .scan-form-wrap summary {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      user-select: none;
+    }
+
+    .scan-form-wrap summary::before {
+      content: "▶";
+      font-size: 0.65rem;
+      transition: transform 150ms;
+    }
+
+    .scan-form-wrap[open] summary::before { transform: rotate(90deg); }
+
+    .scan-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      align-items: center;
+      padding: 0 1rem 0.85rem;
+    }
+
+    .scan-form input[type="url"] { flex: 1 1 240px; }
+    .scan-form input[type="number"] { width: 110px; }
+
+    #scanFormMsg {
+      font-size: 0.84rem;
+      color: var(--accent);
+      flex-basis: 100%;
+    }
+
+    #scanFormMsg.error { color: var(--critical); }
+
     .checklist li {
       margin-bottom: 0.45rem;
       color: #d9e8f2;
@@ -321,8 +371,27 @@ const DASHBOARD_HTML = `<!doctype html>
     <header class="hero">
       <h1>a11y-scan Live Dashboard</h1>
       <p>Streaming accessibility findings for large websites, with rule-level drilldowns and page troubleshooting.</p>
-      <div class="status-pill"><span class="dot"></span><span id="scanStatus">Waiting for scan data...</span></div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-top:0.85rem">
+        <div class="status-pill"><span class="dot"></span><span id="scanStatus">Waiting for scan data...</span></div>
+        <a id="viewReportBtn" href="./report.html" style="display:none;padding:0.35rem 0.85rem;border-radius:999px;background:linear-gradient(90deg,rgba(45,212,191,0.9),rgba(56,189,248,0.85));color:#032430;font-weight:700;font-size:0.84rem;text-decoration:none">View Report →</a>
+      </div>
     </header>
+
+    <details class="scan-form-wrap" id="scanFormWrap">
+      <summary>Start New Scan</summary>
+      <div class="scan-form">
+        <input id="scanUrl" type="url" placeholder="https://example.com" aria-label="Target URL" />
+        <select id="scanWcag" aria-label="WCAG level">
+          <option value="AAA">WCAG AAA</option>
+          <option value="AA">WCAG AA</option>
+          <option value="A">WCAG A</option>
+        </select>
+        <input id="scanMaxPages" type="number" value="2000" min="1" max="50000" aria-label="Max pages" title="Max pages" />
+        <input id="scanSampleTemplate" type="number" value="0" min="0" max="100" aria-label="Sample template (0 = off)" title="Sample template (0 = off)" />
+        <button id="startScanBtn" type="button">Start Scan</button>
+        <span id="scanFormMsg" role="status" aria-live="polite"></span>
+      </div>
+    </details>
 
     <section class="top-grid">
       <article class="stat"><div class="label">WCAG Level</div><div id="wcagLevel" class="value">AAA</div></article>
@@ -375,7 +444,7 @@ const DASHBOARD_HTML = `<!doctype html>
       <article class="panel">
         <h2>Violations Explorer (Rule -> Page -> Nodes)</h2>
         <div class="controls">
-          <select id="ruleSelect"><option value="">Select a rule</option></select>
+          <select id="ruleSelect"><option value="__all__">All rules</option><option value="">— Select a specific rule —</option></select>
           <input id="rulePageSearch" placeholder="Filter pages for selected rule" />
         </div>
         <div class="controls">
@@ -394,7 +463,7 @@ const DASHBOARD_HTML = `<!doctype html>
       <article class="panel">
         <h2>Passes Explorer (Rule -> Page -> Nodes)</h2>
         <div class="controls">
-          <select id="passRuleSelect"><option value="">Select a rule</option></select>
+          <select id="passRuleSelect"><option value="__all__">All rules</option><option value="">— Select a specific rule —</option></select>
           <input id="passRulePageSearch" placeholder="Filter pages for selected rule" />
         </div>
         <div class="controls">
@@ -413,7 +482,7 @@ const DASHBOARD_HTML = `<!doctype html>
       <article class="panel">
         <h2>Incomplete Explorer (Rule -> Page -> Nodes)</h2>
         <div class="controls">
-          <select id="incompleteRuleSelect"><option value="">Select a rule</option></select>
+          <select id="incompleteRuleSelect"><option value="__all__">All rules</option><option value="">— Select a specific rule —</option></select>
           <input id="incompleteRulePageSearch" placeholder="Filter pages for selected rule" />
         </div>
         <div class="controls">
@@ -432,7 +501,7 @@ const DASHBOARD_HTML = `<!doctype html>
       <article class="panel">
         <h2>Inapplicable Explorer (Rule -> Page)</h2>
         <div class="controls">
-          <select id="inapplicableRuleSelect"><option value="">Select a rule</option></select>
+          <select id="inapplicableRuleSelect"><option value="__all__">All rules</option><option value="">— Select a specific rule —</option></select>
           <input id="inapplicableRulePageSearch" placeholder="Filter pages for selected rule" />
         </div>
         <div class="controls">
@@ -747,6 +816,52 @@ const DASHBOARD_HTML = `<!doctype html>
     }
 
     let pollTimer = null
+
+    document.getElementById('startScanBtn').addEventListener('click', async () => {
+      const urlInput = document.getElementById('scanUrl')
+      const msg = document.getElementById('scanFormMsg')
+      const url = urlInput.value.trim()
+
+      msg.className = ''
+      if (!url) {
+        msg.className = 'error'
+        msg.textContent = 'Please enter a URL.'
+        urlInput.focus()
+        return
+      }
+
+      const btn = document.getElementById('startScanBtn')
+      btn.disabled = true
+      msg.textContent = 'Starting scan...'
+
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            wcagLevel: document.getElementById('scanWcag').value,
+            maxPages: Number(document.getElementById('scanMaxPages').value) || 2000,
+            sampleTemplates: Number(document.getElementById('scanSampleTemplate').value) || 0
+          })
+        })
+        const data = await res.json()
+        if (res.ok) {
+          msg.textContent = 'Scan started — dashboard will update automatically.'
+          document.getElementById('scanFormWrap').open = false
+          if (!pollTimer) pollTimer = setInterval(refresh, 1500)
+          refresh()
+        } else {
+          msg.className = 'error'
+          msg.textContent = 'Error: ' + (data.error || res.statusText)
+        }
+      } catch (err) {
+        msg.className = 'error'
+        msg.textContent = 'Error: ' + err.message
+      } finally {
+        btn.disabled = false
+      }
+    })
 
     refresh()
     document.getElementById('pageSearch').addEventListener('input', refresh)

@@ -7,6 +7,8 @@ coverage/
 *.tgz
 .npmrc
 
+nul
+
 # Local env
 .env
 .env.*

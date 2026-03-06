@@ -69,7 +69,7 @@ export async function runScan(targetUrl, options) {
     exclude: options.exclude,
     depth: options.depth,
     sitemap: options.sitemap,
-    sampleProducts: options.sampleProducts,
+    sampleTemplates: options.sampleTemplates,
     timeout: options.timeout,
     headless: options.headless
   }, logger)
@@ -117,7 +117,7 @@ export async function runScan(targetUrl, options) {
       locale: options.locale,
       wcagLevel: options.wcagLevel,
       sitemap: options.sitemap,
-      sampleProducts: options.sampleProducts,
+      sampleTemplates: options.sampleTemplates,
       timeout: options.timeout,
       headless: options.headless,
       manualChecklist

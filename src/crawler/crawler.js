@@ -22,17 +22,17 @@ function pickByPrefix(urls, prefix, count) {
   return filtered.slice(0, count)
 }
 
-function applyShopifySampling(urls, sampleProducts) {
-  if (!isLikelyShopify(urls) || sampleProducts <= 0) return urls
+function applyShopifySampling(urls, sampleTemplate) {
+  if (!isLikelyShopify(urls) || sampleTemplate <= 0) return urls
 
   const selected = new Set()
   const homepage = urls.find((url) => new URL(url).pathname === "/")
   if (homepage) selected.add(homepage)
 
-  for (const url of pickByPrefix(urls, "/products/", sampleProducts)) selected.add(url)
-  for (const url of pickByPrefix(urls, "/collections/", 5)) selected.add(url)
+  for (const url of pickByPrefix(urls, "/products/", sampleTemplate)) selected.add(url)
+  for (const url of pickByPrefix(urls, "/collections/", sampleTemplate)) selected.add(url)
   for (const url of pickByPrefix(urls, "/pages/", 0)) selected.add(url)
-  for (const url of pickByPrefix(urls, "/blogs/", 0)) selected.add(url)
+  for (const url of pickByPrefix(urls, "/blogs/", sampleTemplate)) selected.add(url)
 
   return [...selected]
 }
@@ -128,7 +128,7 @@ export async function discoverUrls(baseUrl, options, logger) {
     urls = await crawlByLinks(normalizedBase, options, robotsRules, logger)
   }
 
-  const sampled = applyShopifySampling(urls, options.sampleProducts)
+  const sampled = applyShopifySampling(urls, options.sampleTemplates)
   const trimmed = sampled.slice(0, options.maxPages)
   return [...new Set(trimmed)]
 }
